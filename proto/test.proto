@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package test;
+
+option go_package = "grpc-simple/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// Common fields that all events share
+message MessageBase {
+    string distinct_id = 1;     // Required - consistent client/session identifier
+    string user_id = 2;         // Optional - set when user is identified
+    string context_id = 3;      // Links to current session context
+    google.protobuf.Timestamp timestamp = 4;
+    string message_id = 5;      // Unique per-event message identifier
+}
+
+// Track event for capturing user actions
+message TrackEvent {
+    MessageBase base = 1;
+    string event_name = 2;
+    map<string, Value> properties = 3;
+}
+
+// Identify event for updating user traits and/or context
+message IdentifyEvent {
+    MessageBase base = 1;
+    map<string, Value> traits = 2;      // User-level traits
+    map<string, Value> context = 3;     // Session/device context
+    bool is_context_update = 4;         // Indicates this identify updates context
+}
+
+// Alias event for connecting different user identifiers
+message AliasEvent {
+    MessageBase base = 1;
+    string previous_id = 2;     // Previous identifier to connect
+}
+
+// Group event for managing group memberships and properties
+message GroupEvent {
+    MessageBase base = 1;
+    string group_id = 2;        // Group/Organization ID
+    string group_type = 3;      // e.g., "organization", "team", "account"
+    map<string, Value> traits = 4;  // Group properties/traits
+}
+
+// Array type for handling lists of values
+message Array {
+    repeated Value values = 1;
+}
+
+// Object type for handling nested structures
+message Object {
+    map<string, Value> fields = 1;
+}
+
+// Value represents different types that can be stored in properties/traits
+message Value {
+    oneof value {
+        string string_value = 1;
+        int64 int_value = 2;
+        double double_value = 3;
+        bool bool_value = 4;
+        Array array_value = 5;
+        Object object_value = 6;
+        bytes bytes_value = 7;
+    }
+}
+
+// Combined event message with type discriminator
+message Event {
+    enum Type {
+        UNKNOWN = 0;
+        TRACK = 1;
+        IDENTIFY = 2;
+        ALIAS = 3;
+        GROUP = 4;
+    }
+    
+    Type type = 1;
+    oneof event {
+        TrackEvent track = 2;
+        IdentifyEvent identify = 3;
+        AliasEvent alias = 4;
+        GroupEvent group = 5;
+    }
+}
+
+message BatchRequest {
+    repeated Event events = 1;
+}
+
+message EventResponse {
+    string message_id = 1;
+    int64 server_timestamp = 2;
+}
+
+message BatchResponse {
+    repeated EventResponse responses = 1;
+}
+
+service TestService {
+    rpc SendMessage (Event) returns (EventResponse) {}
+    rpc SendBatch (BatchRequest) returns (BatchResponse) {}
+}
