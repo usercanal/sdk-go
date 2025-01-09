@@ -1,12 +1,13 @@
-// usercanal/usercanal.go
+// usercanal.go
 package usercanal
 
 import (
+	"context"
 	"time"
 
-	"github.com/usercanal/sdk-go/api"
+	"github.com/usercanal/sdk-go/internal/api"
+	"github.com/usercanal/sdk-go/internal/version"
 	"github.com/usercanal/sdk-go/types"
-	"github.com/usercanal/sdk-go/version"
 )
 
 // Config holds client configuration
@@ -18,8 +19,13 @@ type Config struct {
 	Debug         bool          // Enable debug logging
 }
 
+// Client is a facade over the internal API client
+type Client struct {
+	internal *api.Client
+}
+
 // NewClient creates a new client with configuration
-func NewClient(apiKey string, cfg ...Config) (*api.Client, error) {
+func NewClient(apiKey string, cfg ...Config) (*Client, error) {
 	var options []api.Option
 
 	if len(cfg) > 0 {
@@ -33,10 +39,44 @@ func NewClient(apiKey string, cfg ...Config) (*api.Client, error) {
 		)
 	}
 
-	return api.New(apiKey, options...)
+	client, err := api.New(apiKey, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{internal: client}, nil
 }
 
-// Re-export only the types from types package that users need
+// Re-export main client methods
+func (c *Client) Track(ctx context.Context, event Event) error {
+	return c.internal.Track(ctx, event)
+}
+
+func (c *Client) Identify(ctx context.Context, identity Identity) error {
+	return c.internal.Identify(ctx, identity)
+}
+
+func (c *Client) Group(ctx context.Context, group GroupInfo) error {
+	return c.internal.Group(ctx, group)
+}
+
+func (c *Client) Revenue(ctx context.Context, rev Revenue) error {
+	return c.internal.Revenue(ctx, rev)
+}
+
+func (c *Client) Flush(ctx context.Context) error {
+	return c.internal.Flush(ctx)
+}
+
+func (c *Client) Close() error {
+	return c.internal.Close()
+}
+
+func (c *Client) DumpStatus() {
+	c.internal.DumpStatus()
+}
+
+// Re-export types that users need
 type (
 	Properties = types.Properties
 	Event      = types.Event
@@ -47,7 +87,7 @@ type (
 	Currency   = types.Currency
 )
 
-// Re-export constants from types package
+// Re-export constants
 const (
 	// User lifecycle events
 	UserSignedUp = types.UserSignedUp

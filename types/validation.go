@@ -3,8 +3,9 @@ package types
 
 import (
 	"fmt"
-	"github.com/usercanal/sdk-go/logger"
 	"time"
+
+	"github.com/usercanal/sdk-go/internal/logger"
 )
 
 // Validate validates an Event

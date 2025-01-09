@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/usercanal/sdk-go/logger"
+	"github.com/usercanal/sdk-go/internal/logger"
 	pb "github.com/usercanal/sdk-go/proto"
 )
 

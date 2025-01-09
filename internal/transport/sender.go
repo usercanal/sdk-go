@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/usercanal/sdk-go/logger"
+	"github.com/usercanal/sdk-go/internal/logger"
 	pb "github.com/usercanal/sdk-go/proto"
 	"github.com/usercanal/sdk-go/types"
 )
@@ -38,7 +38,7 @@ type Metrics struct {
 
 // Sender handles the gRPC connection and event sending
 type Sender struct {
-	client     pb.TestServiceClient
+	client     pb.EventServiceClient
 	conn       *grpc.ClientConn
 	maxRetries int
 	apiKey     string
@@ -92,7 +92,7 @@ func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 	}
 
 	s := &Sender{
-		client:     pb.NewTestServiceClient(conn),
+		client:     pb.NewEventServiceClient(conn),
 		conn:       conn,
 		maxRetries: maxRetries,
 		apiKey:     apiKey,

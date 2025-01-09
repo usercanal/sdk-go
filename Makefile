@@ -1,9 +1,9 @@
 VERSION ?= dev
 COMMIT_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS = -X grpc-simple/version.version=$(VERSION) \
-          -X grpc-simple/version.commitHash=$(COMMIT_HASH) \
-          -X grpc-simple/version.buildTime=$(BUILD_TIME)
+LDFLAGS = -X go-sdk/version.version=$(VERSION) \
+          -X go-sdk/version.commitHash=$(COMMIT_HASH) \
+          -X go-sdk/version.buildTime=$(BUILD_TIME)
 
 .PHONY: build
 build:

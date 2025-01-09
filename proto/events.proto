@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package test;
+package usercanal.events;
 
-option go_package = "grpc-simple/proto";
+option go_package = "github.com/usercanal/sdk-go/proto";
 
 import "google/protobuf/timestamp.proto";
 
@@ -99,7 +99,7 @@ message BatchResponse {
     repeated EventResponse responses = 1;
 }
 
-service TestService {
+service EventService {
     rpc SendMessage (Event) returns (EventResponse) {}
     rpc SendBatch (BatchRequest) returns (BatchResponse) {}
 }

@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/usercanal/sdk-go/batch"
-	"github.com/usercanal/sdk-go/convert"
-	"github.com/usercanal/sdk-go/logger"
-	"github.com/usercanal/sdk-go/transport"
+	"github.com/usercanal/sdk-go/internal/batch"
+	"github.com/usercanal/sdk-go/internal/convert"
+	"github.com/usercanal/sdk-go/internal/logger"
+	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
 )
 

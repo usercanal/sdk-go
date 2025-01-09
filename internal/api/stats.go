@@ -2,7 +2,7 @@
 package api
 
 import (
-	"github.com/usercanal/sdk-go/logger"
+	"github.com/usercanal/sdk-go/internal/logger"
 	"github.com/usercanal/sdk-go/types"
 )
 

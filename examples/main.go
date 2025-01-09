@@ -6,12 +6,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/usercanal/sdk-go/usercanal"
+	usercanal "github.com/usercanal/sdk-go"
 )
 
 func main() {
 	// Initialize with struct config
-	canal, err := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
+	client, err := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
 		Endpoint:  "127.0.0.1:50051",
 		BatchSize: 100,
 		Debug:     true,
@@ -19,12 +19,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
-	defer canal.Close()
+	defer client.Close()
 
 	// Track a feature usage
-	err = canal.Track(context.Background(), usercanal.Event{
+	err = client.Track(context.Background(), usercanal.Event{
 		UserId: "user123",
-		Name:   usercanal.FeatureUsed, // This is now an EventName type
+		Name:   usercanal.FeatureUsed,
 		Properties: usercanal.Properties{
 			"feature_name": "search",
 			"duration_ms":  1500,
@@ -37,16 +37,16 @@ func main() {
 	}
 
 	// Track revenue
-	err = canal.Track(context.Background(), usercanal.Event{
+	err = client.Track(context.Background(), usercanal.Event{
 		UserId: "user123",
-		Name:   usercanal.OrderCompleted, // This is now an EventName type
+		Name:   usercanal.OrderCompleted,
 		Properties: usercanal.Properties{
 			"revenue":        99.99,
-			"currency":       usercanal.CurrencyUSD, // Using Currency type
+			"currency":       usercanal.CurrencyUSD,
 			"product_id":     "prod_123",
 			"quantity":       1,
-			"payment_method": usercanal.PaymentMethodCard,  // Using PaymentMethod type
-			"type":           usercanal.RevenueTypeOneTime, // Using RevenueType type
+			"payment_method": usercanal.PaymentMethodCard,
+			"type":           usercanal.RevenueTypeOneTime,
 		},
 		Timestamp: time.Now(),
 	})
@@ -55,23 +55,27 @@ func main() {
 	}
 
 	// Identify user
-	err = canal.Identify(context.Background(), usercanal.Identity{
+	err = client.Identify(context.Background(), usercanal.Identity{
 		UserId: "user123",
 		Properties: usercanal.Properties{
 			"name":        "John Doe",
 			"email":       "john@example.com",
-			"auth_method": usercanal.AuthMethodEmail, // Using AuthMethod type
+			"auth_method": usercanal.AuthMethodEmail,
 		},
 	})
 	if err != nil {
 		log.Printf("Failed to identify user: %v", err)
 	}
 
-	canal.Flush(context.Background())
+	// Flush any pending events
+	err = client.Flush(context.Background())
+	if err != nil {
+		log.Printf("Failed to flush events: %v", err)
+	}
 
 	// Wait a bit to ensure events are sent
 	time.Sleep(2 * time.Second)
 
-	// Debug, Print detailed status (includes connection state, event queues, etc.)
-	canal.DumpStatus()
+	// Debug, Print detailed status
+	client.DumpStatus()
 }
