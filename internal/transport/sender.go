@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/usercanal/sdk-go/internal/logger"
@@ -164,6 +165,11 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
+
+	// Add API key to context metadata
+	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
+		"x-api-key": s.apiKey,
+	}))
 
 	s.mu.RLock()
 	state := s.state
