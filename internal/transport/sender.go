@@ -1,9 +1,8 @@
-// transport/sender.go
 package transport
 
 import (
 	"context"
-	"math/rand"
+	"fmt"
 	"sync"
 	"time"
 
@@ -21,10 +20,10 @@ import (
 
 const (
 	defaultMaxRetries     = 3
-	defaultDialTimeout    = 5 * time.Second
 	defaultMaxMessageSize = 4 * 1024 * 1024 // 4MB
 	defaultPingInterval   = 10 * time.Second
 	defaultPingTimeout    = 3 * time.Second
+	defaultWaitTimeout    = 5 * time.Second
 )
 
 // Metrics tracks sending statistics
@@ -43,14 +42,16 @@ type Sender struct {
 	client     pb.EventServiceClient
 	maxRetries int
 	apiKey     string
-	state      connectivity.State
 	startTime  time.Time
 	metrics    Metrics
-	mu         sync.RWMutex // Single mutex for both state and metrics
-	done       chan struct{}
+	mu         sync.RWMutex
+
+	// Control
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	wg         sync.WaitGroup
 }
 
-// NewSender creates a new gRPC sender
 func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 	if apiKey == "" {
 		return nil, types.NewValidationError("apiKey", "cannot be empty")
@@ -65,6 +66,8 @@ func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 	}
 
 	logger.Debug("Creating new sender for endpoint: %s", endpoint)
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create connection manager with options
 	connMgr := NewConnManager(endpoint)
@@ -84,63 +87,56 @@ func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 	}
 	connMgr.SetDialOptions(opts)
 
+	s := &Sender{
+		connMgr:    connMgr,
+		maxRetries: maxRetries,
+		apiKey:     apiKey,
+		startTime:  time.Now(),
+		ctx:        ctx,
+		cancelFunc: cancel,
+	}
+
 	// Attempt initial connection
-	if err := connMgr.Connect(context.Background()); err != nil {
+	if err := connMgr.Connect(ctx); err != nil {
+		cancel() // Clean up context if connection fails
 		return nil, &types.NetworkError{
 			Operation: "Connect",
 			Message:   err.Error(),
 		}
 	}
 
-	s := &Sender{
-		connMgr:    connMgr,
-		maxRetries: maxRetries,
-		apiKey:     apiKey,
-		startTime:  time.Now(),
-		done:       make(chan struct{}),
-	}
+	// Initialize client
+	s.updateClient()
 
-	// Initialize client and state
-	s.updateClientAndState()
-
-	// Monitor connection state in background
-	go s.monitorConnection()
+	// Start state monitoring
+	s.wg.Add(1)
+	go s.monitorStateChanges()
 
 	return s, nil
 }
 
-func (s *Sender) updateClientAndState() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *Sender) updateClient() {
 	if conn := s.connMgr.GetConn(); conn != nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.client = pb.NewEventServiceClient(conn)
-		s.state = conn.GetState()
 	}
 }
 
-func (s *Sender) monitorConnection() {
+func (s *Sender) monitorStateChanges() {
+	defer s.wg.Done()
+
 	for {
 		select {
-		case <-s.done:
+		case <-s.ctx.Done():
 			return
-		default:
-			conn := s.connMgr.GetConn()
-			if conn == nil {
-				time.Sleep(time.Second) // Prevent tight loop if no connection
-				continue
+		case state, ok := <-s.connMgr.StateChanges():
+			if !ok {
+				return
 			}
-
-			currentState := conn.GetState()
-			s.mu.Lock()
-			if currentState != s.state {
-				oldState := s.state
-				s.state = currentState
-				logger.Debug("Connection state changed from %s to: %s", oldState, currentState)
+			if state.State == connectivity.Ready {
+				s.updateClient()
 			}
-			s.mu.Unlock()
-
-			conn.WaitForStateChange(context.Background(), currentState)
 		}
 	}
 }
@@ -172,19 +168,16 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 		return nil
 	}
 
-	// Add API key to context metadata
+	// Check if sender is shutting down
+	select {
+	case <-s.ctx.Done():
+		return types.NewValidationError("sender", "is shutting down")
+	default:
+	}
+
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
 		"x-api-key": s.apiKey,
 	}))
-
-	s.mu.RLock()
-	state := s.state
-	s.mu.RUnlock()
-
-	// Only log state if not ready, but don't prevent sending
-	if state != connectivity.Ready {
-		logger.Warn("Attempting to send while connection state is: %s", state)
-	}
 
 	req := &pb.BatchRequest{
 		Events: events,
@@ -201,63 +194,80 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 		default:
 		}
 
-		if attempt > 0 {
-			backoff := calculateBackoff(attempt)
-			logger.Debug("Retrying in %v... (attempt %d/%d)",
-				backoff, attempt+1, s.maxRetries+1)
-			time.Sleep(backoff)
-		}
-
-		// Ensure we have a valid client
-		if s.client == nil {
-			s.updateClientAndState()
-			if s.client == nil {
-				continue // Skip this attempt if still no client
+		// Get current connection state
+		state := s.connMgr.GetState()
+		if state.State != connectivity.Ready {
+			logger.Warn("Attempting to send while connection state is: %s (endpoint: %s)",
+				state.State, state.Endpoint)
+			if !s.waitForConnection(ctx) {
+				continue
 			}
 		}
 
-		_, err := s.client.SendBatch(ctx, req)
-		if err == nil {
-			s.mu.Lock()
-			s.metrics.EventsSent += int64(len(events))
-			s.metrics.BatchesSent++
-			s.metrics.LastSendTime = time.Now()
-			s.metrics.AverageBatchSize = float64(s.metrics.EventsSent) / float64(s.metrics.BatchesSent)
-			s.mu.Unlock()
+		s.mu.RLock()
+		client := s.client
+		s.mu.RUnlock()
 
-			logger.Debug("Successfully sent batch of %d events", len(events))
+		if client == nil {
+			s.updateClient()
+			continue
+		}
+
+		_, err := client.SendBatch(ctx, req)
+		if err == nil {
+			s.recordSuccess(len(events))
 			return nil
 		}
 
 		lastErr = err
-		s.mu.Lock()
-		s.metrics.FailedAttempts++
-		s.metrics.LastFailureTime = time.Now()
-		s.mu.Unlock()
+		s.recordFailure()
+		logger.Warn("Send attempt %d/%d failed: %v", attempt+1, s.maxRetries+1, err)
 
-		logger.Warn("Failed to send batch (attempt %d/%d): %v",
-			attempt+1, s.maxRetries+1, err)
-
-		// Force connection refresh on error
+		// Trigger reconnection through ConnManager
 		s.connMgr.Connect(context.Background())
-		s.updateClientAndState()
 	}
 
 	return &types.NetworkError{
 		Operation: "Send",
-		Message:   lastErr.Error(),
+		Message:   fmt.Sprintf("failed after %d attempts: %v", s.maxRetries, lastErr),
 		Retries:   s.maxRetries,
 	}
 }
 
-func calculateBackoff(attempt int) time.Duration {
-	if attempt == 0 {
-		return 0
+func (s *Sender) waitForConnection(ctx context.Context) bool {
+	timer := time.NewTimer(defaultWaitTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-timer.C:
+			return false
+		case <-time.After(100 * time.Millisecond):
+			if s.connMgr.GetState().State == connectivity.Ready {
+				return true
+			}
+		}
 	}
-	base := 100 * time.Millisecond
-	max := time.Duration(1<<uint(attempt)) * base
-	jitter := time.Duration(rand.Int63n(int64(max / 2)))
-	return max + jitter
+}
+
+func (s *Sender) recordSuccess(eventCount int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.metrics.EventsSent += int64(eventCount)
+	s.metrics.BatchesSent++
+	s.metrics.LastSendTime = time.Now()
+	s.metrics.AverageBatchSize = float64(s.metrics.EventsSent) / float64(s.metrics.BatchesSent)
+}
+
+func (s *Sender) recordFailure() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.metrics.FailedAttempts++
+	s.metrics.LastFailureTime = time.Now()
 }
 
 func (s *Sender) GetMetrics() Metrics {
@@ -267,9 +277,8 @@ func (s *Sender) GetMetrics() Metrics {
 }
 
 func (s *Sender) State() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.state.String()
+	state := s.connMgr.GetState()
+	return state.State.String()
 }
 
 func (s *Sender) Uptime() time.Duration {
@@ -277,8 +286,13 @@ func (s *Sender) Uptime() time.Duration {
 }
 
 func (s *Sender) Close() error {
-	close(s.done) // Signal monitor goroutine to stop
+	// Signal shutdown
+	s.cancelFunc()
 
+	// Wait for goroutines to finish
+	s.wg.Wait()
+
+	// Close connection manager
 	if err := s.connMgr.Close(); err != nil {
 		return &types.NetworkError{
 			Operation: "Close",
