@@ -134,7 +134,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		opt(cfg)
 	}
 
-	sender, err := transport.NewSender(apiKey, cfg.endpoint, cfg.maxRetries)
+	sender, err := transport.NewSender(apiKey, cfg.endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sender: %w", err)
 	}

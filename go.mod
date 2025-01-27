@@ -3,6 +3,7 @@ module github.com/usercanal/sdk-go
 go 1.23.4
 
 require (
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/google/uuid v1.6.0
 	google.golang.org/grpc v1.69.2
 	google.golang.org/protobuf v1.36.2
