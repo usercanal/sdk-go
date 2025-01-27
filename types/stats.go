@@ -13,4 +13,9 @@ type Stats struct {
 	LastFlushTime    time.Time
 	LastFailureTime  time.Time
 	AverageBatchSize float64
+
+	ActiveEndpoint    string    // Current endpoint being used
+	ResolvedEndpoints []string  // All available endpoints
+	LastDNSResolution time.Time // Last successful DNS resolution
+	DNSFailures       int64     // Number of DNS resolution failures
 }

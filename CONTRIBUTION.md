@@ -116,65 +116,6 @@ make build VERSION=1.0.0-beta.1
 
 ### Environment Setup
 1. Install required tools:
-   * Go 1.21 or later
+   * Go 1.23 or later
    * Protocol Buffers compiler
    * Make
-
-### Build Commands
-\`\`\`bash
-make build      # Build for current platform
-make install    # Install locally
-make release    # Build for all platforms
-\`\`\`
-
-## Release Process
-
-### Versioning
-1. Follow semantic versioning (MAJOR.MINOR.PATCH)
-2. Beta releases use -beta.N suffix
-3. Release candidates use -rc.N suffix
-
-### Release Steps
-1. Update version in Makefile
-2. Update CHANGELOG.md
-3. Run full test suite
-4. Tag release in git
-5. Build release binaries
-6. Update documentation
-
-### Documentation
-1. Update README.md
-2. Update API documentation
-3. Update examples
-4. Check godoc formatting
-
-## Best Practices
-
-### SDK Usage
-1. Always provide contexts for cancellation
-2. Handle errors appropriately
-3. Configure batch sizes based on usage
-4. Monitor SDK health via stats
-5. Implement proper shutdown
-
-### Production Deployment
-1. Set appropriate timeouts
-2. Configure retry policies
-3. Monitor event queue size
-4. Handle backpressure
-5. Implement proper logging
-
-## Support
-
-### Getting Help
-1. Open an issue for bugs
-2. Use discussions for questions
-3. Check existing issues first
-4. Provide minimal reproduction
-
-### Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for changes
-4. Update documentation
-5. Submit pull request

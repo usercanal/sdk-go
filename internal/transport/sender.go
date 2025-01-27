@@ -39,8 +39,8 @@ type Metrics struct {
 
 // Sender handles the gRPC connection and event sending
 type Sender struct {
+	connMgr    *ConnManager
 	client     pb.EventServiceClient
-	conn       *grpc.ClientConn
 	maxRetries int
 	apiKey     string
 	state      connectivity.State
@@ -66,6 +66,8 @@ func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 
 	logger.Debug("Creating new sender for endpoint: %s", endpoint)
 
+	// Create connection manager with options
+	connMgr := NewConnManager(endpoint)
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -76,16 +78,14 @@ func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 		grpc.WithDefaultCallOptions(
 			grpc.CallContentSubtype("proto"),
 			grpc.ForceCodec(&protoCodec{}),
-			grpc.WaitForReady(true), // Changed to true to wait for connection
+			grpc.WaitForReady(true),
 			grpc.MaxCallRecvMsgSize(defaultMaxMessageSize),
 		),
 	}
+	connMgr.SetDialOptions(opts)
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultDialTimeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, endpoint, opts...)
-	if err != nil {
+	// Attempt initial connection
+	if err := connMgr.Connect(context.Background()); err != nil {
 		return nil, &types.NetworkError{
 			Operation: "Connect",
 			Message:   err.Error(),
@@ -93,21 +93,30 @@ func NewSender(apiKey, endpoint string, maxRetries int) (*Sender, error) {
 	}
 
 	s := &Sender{
-		client:     pb.NewEventServiceClient(conn),
-		conn:       conn,
+		connMgr:    connMgr,
 		maxRetries: maxRetries,
 		apiKey:     apiKey,
 		startTime:  time.Now(),
 		done:       make(chan struct{}),
 	}
 
-	// Initialize starting state
-	s.state = conn.GetState()
+	// Initialize client and state
+	s.updateClientAndState()
 
 	// Monitor connection state in background
 	go s.monitorConnection()
 
 	return s, nil
+}
+
+func (s *Sender) updateClientAndState() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if conn := s.connMgr.GetConn(); conn != nil {
+		s.client = pb.NewEventServiceClient(conn)
+		s.state = conn.GetState()
+	}
 }
 
 func (s *Sender) monitorConnection() {
@@ -116,15 +125,22 @@ func (s *Sender) monitorConnection() {
 		case <-s.done:
 			return
 		default:
-			state := s.conn.GetState()
-			if state != s.state {
-				s.mu.Lock()
-				oldState := s.state
-				s.state = state
-				s.mu.Unlock()
-				logger.Debug("Connection state changed from %s to: %s", oldState, state)
+			conn := s.connMgr.GetConn()
+			if conn == nil {
+				time.Sleep(time.Second) // Prevent tight loop if no connection
+				continue
 			}
-			s.conn.WaitForStateChange(context.Background(), state)
+
+			currentState := conn.GetState()
+			s.mu.Lock()
+			if currentState != s.state {
+				oldState := s.state
+				s.state = currentState
+				logger.Debug("Connection state changed from %s to: %s", oldState, currentState)
+			}
+			s.mu.Unlock()
+
+			conn.WaitForStateChange(context.Background(), currentState)
 		}
 	}
 }
@@ -149,16 +165,6 @@ func (c *protoCodec) Unmarshal(data []byte, v interface{}) error {
 
 func (c *protoCodec) Name() string {
 	return "proto"
-}
-
-func calculateBackoff(attempt int) time.Duration {
-	if attempt == 0 {
-		return 0
-	}
-	base := 100 * time.Millisecond
-	max := time.Duration(1<<uint(attempt)) * base
-	jitter := time.Duration(rand.Int63n(int64(max / 2)))
-	return max + jitter
 }
 
 func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
@@ -202,6 +208,14 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 			time.Sleep(backoff)
 		}
 
+		// Ensure we have a valid client
+		if s.client == nil {
+			s.updateClientAndState()
+			if s.client == nil {
+				continue // Skip this attempt if still no client
+			}
+		}
+
 		_, err := s.client.SendBatch(ctx, req)
 		if err == nil {
 			s.mu.Lock()
@@ -223,6 +237,10 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 
 		logger.Warn("Failed to send batch (attempt %d/%d): %v",
 			attempt+1, s.maxRetries+1, err)
+
+		// Force connection refresh on error
+		s.connMgr.Connect(context.Background())
+		s.updateClientAndState()
 	}
 
 	return &types.NetworkError{
@@ -230,6 +248,16 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 		Message:   lastErr.Error(),
 		Retries:   s.maxRetries,
 	}
+}
+
+func calculateBackoff(attempt int) time.Duration {
+	if attempt == 0 {
+		return 0
+	}
+	base := 100 * time.Millisecond
+	max := time.Duration(1<<uint(attempt)) * base
+	jitter := time.Duration(rand.Int63n(int64(max / 2)))
+	return max + jitter
 }
 
 func (s *Sender) GetMetrics() Metrics {
@@ -250,7 +278,8 @@ func (s *Sender) Uptime() time.Duration {
 
 func (s *Sender) Close() error {
 	close(s.done) // Signal monitor goroutine to stop
-	if err := s.conn.Close(); err != nil {
+
+	if err := s.connMgr.Close(); err != nil {
 		return &types.NetworkError{
 			Operation: "Close",
 			Message:   err.Error(),

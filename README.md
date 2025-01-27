@@ -47,10 +47,14 @@ func main() {
 
 ## Key Features
 
-- **Efficient gRPC-based communication** for low-latency event tracking.
-- **Automatic batching and retry** mechanisms for reliable data delivery.
-- **Built-in support for revenue and subscription tracking** with type-safe constants.
-- **User & Group Analytics** to understand user behavior and group dynamics.
+- **Efficient gRPC-based communication** for low-latency event tracking
+- **Automatic batching and retry** mechanisms for reliable data delivery
+- **Built-in high availability**
+  - Automatic DNS-based failover
+  - Smart reconnection with exponential backoff
+  - No data loss during collector upgrades or outages
+- **Built-in support for revenue and subscription tracking** with type-safe constants
+- **User & Group Analytics** to understand user behavior and group dynamics
 
 ## Explore More
 

@@ -12,7 +12,7 @@ import (
 func main() {
 	// Initialize with struct config
 	client, err := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
-		Endpoint:  "127.0.0.1:50051",
+		Endpoint:  "collect.usercanal.com:50051",
 		BatchSize: 100,
 		Debug:     true,
 	})
