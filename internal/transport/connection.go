@@ -257,13 +257,17 @@ func (cm *ConnManager) Connect(ctx context.Context) error {
 	}
 
 	endpoint := cm.getNextEndpoint()
-	logger.Debug("Attempting connection to %s (attempt %d)", endpoint, attempt)
+	logger.Debug("Connection attempt %d starting (backoff: %v)", attempt, backoff)
 
 	conn, err := grpc.DialContext(ctx, endpoint, cm.opts...)
 	if err != nil {
+		logger.Error("Connection attempt %d failed: %v", attempt, err)
 		cm.updateState(connectivity.TransientFailure)
 		return fmt.Errorf("connection attempt %d failed: %w", attempt, err)
 	}
+
+	initialState := conn.GetState()
+	logger.Debug("Initial connection state: %s", initialState)
 
 	cm.mu.Lock()
 	cm.conn = conn
@@ -308,9 +312,14 @@ func (cm *ConnManager) monitor() {
 			cm.mu.RUnlock()
 
 			state := conn.GetState()
+			// Add more detailed logging
+			logger.Debug("Current connection state: %s (attempt: %d)",
+				state, atomic.LoadInt64(&cm.attempts))
+
 			cm.updateState(state)
 
 			if state == connectivity.TransientFailure {
+				logger.Warn("Connection failed, initiating reconnect...")
 				cm.tryReconnect()
 			}
 
@@ -322,17 +331,24 @@ func (cm *ConnManager) monitor() {
 }
 
 func (cm *ConnManager) tryReconnect() {
-	// Only allow one reconnection attempt at a time
 	if !atomic.CompareAndSwapInt32(&cm.reconnecting, 0, 1) {
 		return
 	}
 	defer atomic.StoreInt32(&cm.reconnecting, 0)
 
+	// Add immediate logging
+	logger.Debug("Starting reconnection attempt...")
+
 	ctx, cancel := context.WithTimeout(cm.cancelCtx, reconnectTimeout)
 	defer cancel()
 
 	if err := cm.Connect(ctx); err != nil {
-		logger.Error("Reconnection failed: %v", err)
+		logger.Error("Reconnection failed: %v, will retry in background", err)
+		// Force another reconnect attempt
+		go func() {
+			time.Sleep(time.Second)
+			cm.tryReconnect()
+		}()
 	}
 }
 
