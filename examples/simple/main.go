@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// Initialize client with minimal configuration
-	client, err := usercanal.NewClient("000102030405060708090a0b0c0d0e0f")
+	client, err := usercanal.NewClient("YOUR_API_KEY")
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
