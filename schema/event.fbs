@@ -1,0 +1,31 @@
+// schema/event.fbs
+namespace event_collector;
+
+/// Event types for different processing paths
+enum EventType:uint32 {
+    UNKNOWN = 0,                        // Add default value at 0
+    TRACK = 1,                          // User action tracking
+    IDENTIFY = 2,                       // User identification/traits
+    GROUP = 3,                          // Group membership/traits
+    ALIAS = 4,                          // Identity resolution
+    ENRICH = 5                          // Generic entity enrichment
+}
+
+/// Single event in the CDP system
+table Event {
+    timestamp:uint64;                   // Unix timestamp in milliseconds
+    event_type:EventType;               // Determines how payload is processed
+    user_id:[ubyte] (required);         // Fixed 16-byte UUID
+    payload:[ubyte] (required);         // Event data (as bytes for flexibility)
+}
+// session_id (context_id) and message_id (tracing, sorting) can be added in payload.
+// we will test adding this through the SDKs instead.
+
+
+/// All messages must be sent as EventBatch
+table EventBatch {
+    api_key:[ubyte] (required, id: 0);  // Fixed 16-byte authentication key
+    events:[Event] (required, id: 1);   // One or more events
+}
+
+root_type EventBatch;

@@ -47,8 +47,8 @@ This document contains information for SDK developers. For SDK users, please ref
   * Failed batch retry
   * Event requeuing
 
-### Transport Layer (`go-sdk/transport/`)
-* gRPC communication
+### Transport Layer (`internal/transport/`)
+* TCP communication
   * Connection management
   * State monitoring
   * Keep-alive handling
@@ -60,11 +60,17 @@ This document contains information for SDK developers. For SDK users, please ref
   * Latency tracking
   * Batch statistics
 
+### Event Serialization (`schema/` & `internal/event/`)
+* FlatBuffers schema definitions
+* Efficient binary serialization
+* Type-safe event handling
+
 ### Protocol Conversion (`go-sdk/convert/`)
-* Protocol buffer conversion
-  * Go types to protobuf
-  * Proper type handling
-  * Validation during conversion
+* FlatBuffers conversion
+  * Go types to FlatBuffers
+  * Efficient zero-copy conversion
+  * Proper type handling and validation
+  * Memory pooling for builders
 
 ## Development Guidelines
 
@@ -77,42 +83,6 @@ This document contains information for SDK developers. For SDK users, please ref
    * ValidationError for input validation
    * NetworkError for transport issues
    * TimeoutError for deadlines
-
-### Concurrency
-1. Use RWMutex for better read performance
-2. Implement clean shutdown procedures
-3. Proper goroutine management
-4. Channel-based communication where appropriate
-5. Document concurrency guarantees
-
-### Testing
-1. Table-driven tests with good coverage
-2. Integration tests for full flow
-3. Benchmark tests for performance
-4. Concurrency tests with -race
-5. Mock external dependencies using interfaces
-
-### Performance Considerations
-1. Efficient batching strategies
-2. Memory allocation optimization
-3. Lock contention minimization
-4. Connection pooling
-5. Buffer reuse where possible
-
-### Code Style
-1. Follow Go standard formatting
-2. Use meaningful variable names
-3. Add comprehensive comments
-4. Document exported symbols
-5. Use consistent error handling patterns
-
-## Build Process
-
-### Version Management
-\`\`\`bash
-# Build with version information
-make build VERSION=1.0.0-beta.1
-\`\`\`
 
 ### Environment Setup
 1. Install required tools:

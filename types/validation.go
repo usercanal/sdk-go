@@ -17,15 +17,12 @@ func (e *Event) Validate() error {
 		return NewValidationError("Name", "is required")
 	}
 	if !e.Name.IsStandardEvent() {
-		// Allow custom events, but log a warning
 		logger.Warn("Non-standard event name used: %s", e.Name)
 	}
 	if err := validateProperties(e.Properties); err != nil {
 		return fmt.Errorf("properties validation failed: %w", err)
 	}
-	if e.Timestamp.IsZero() {
-		return NewValidationError("Timestamp", "is required")
-	}
+	// Remove timestamp validation here
 	return nil
 }
 

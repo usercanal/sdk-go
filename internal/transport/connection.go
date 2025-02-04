@@ -1,3 +1,4 @@
+// transport/connection.go
 package transport
 
 import (
@@ -9,31 +10,25 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
-
 	"github.com/usercanal/sdk-go/internal/logger"
 	"github.com/usercanal/sdk-go/types"
 )
 
-const defaultGRPCPort = "50051"
+const defaultTCPPort = "9000"
 
 var ErrConnectionClosed = types.NewValidationError("connection", "is closed")
 
-// ConnectionState wraps gRPC connectivity state with additional metadata
+// ConnectionState represents the TCP connection state
 type ConnectionState struct {
-	State       connectivity.State
+	State       string
 	LastChanged time.Time
 	Endpoint    string
 }
 
 type ConnManager struct {
 	// Core connection
-	conn     *grpc.ClientConn
+	conn     net.Conn
 	endpoint string
-	opts     []grpc.DialOption
 
 	// State management
 	currentState ConnectionState
@@ -67,16 +62,6 @@ func NewConnManager(endpoint string) *ConnManager {
 	b.MaxInterval = 30 * time.Second
 	b.MaxElapsedTime = 0 // Never stop retrying
 
-	// Set default gRPC options
-	defaultOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             3 * time.Second,
-			PermitWithoutStream: true,
-		}),
-	}
-
 	cm := &ConnManager{
 		endpoint:    endpoint,
 		ctx:         ctx,
@@ -84,12 +69,11 @@ func NewConnManager(endpoint string) *ConnManager {
 		stateChange: make(chan ConnectionState, 1),
 		backoff:     b,
 		retrySignal: make(chan struct{}, 1),
-		opts:        defaultOpts, // Set default options
 	}
 
 	// Initialize state
 	cm.currentState = ConnectionState{
-		State:       connectivity.Idle,
+		State:       "Idle",
 		LastChanged: time.Now(),
 		Endpoint:    endpoint,
 	}
@@ -108,7 +92,7 @@ func NewConnManager(endpoint string) *ConnManager {
 
 func (cm *ConnManager) resolveEndpoint() error {
 	host := cm.endpoint
-	port := defaultGRPCPort
+	port := defaultTCPPort
 	if h, p, err := net.SplitHostPort(cm.endpoint); err == nil {
 		host = h
 		port = p
@@ -152,61 +136,36 @@ func (cm *ConnManager) Connect(ctx context.Context) error {
 	endpoint := cm.getNextEndpoint()
 
 	logger.Debug("Starting connection attempt %d to %s", attempt, endpoint)
-	cm.updateState(connectivity.Connecting)
+	cm.updateState("Connecting")
 
-	// Define retry policy in service config
-	retryPolicy := `{
-        "methodConfig": [{
-            "name": [{"service": "EventService"}],
-            "retryPolicy": {
-                "MaxAttempts": 4,
-                "InitialBackoff": "1s",
-                "MaxBackoff": "30s",
-                "BackoffMultiplier": 1.5,
-                "RetryableStatusCodes": [ "UNAVAILABLE" ]
-            }
-        }]}`
+	// Create TCP connection with timeout
+	dialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
 
-	// Add retry policy to dial options
-	opts := append([]grpc.DialOption{
-		grpc.WithDefaultServiceConfig(retryPolicy),
-	}, cm.opts...)
-
-	// Create connection with timeout
-	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	conn, err := grpc.DialContext(dialCtx, endpoint, opts...)
+	conn, err := dialer.DialContext(ctx, "tcp", endpoint)
 	if err != nil {
-		cm.updateState(connectivity.TransientFailure)
+		cm.updateState("Failed")
 		logger.Error("Connection attempt %d failed: %v", attempt, err)
 		cm.signalRetry()
-		return err
+		return fmt.Errorf("failed to connect to %s: %w", endpoint, err)
 	}
 
-	state := conn.GetState()
-	logger.Debug("Initial connection state for attempt %d: %s", attempt, state)
-
-	if state == connectivity.TransientFailure {
-		conn.Close()
-		cm.updateState(connectivity.TransientFailure)
-		logger.Error("Connection attempt %d failed immediately", attempt)
-		cm.signalRetry()
-		return fmt.Errorf("connection failed immediately")
-	}
+	// Configure TCP connection
+	tcpConn := conn.(*net.TCPConn)
+	tcpConn.SetNoDelay(true)
+	tcpConn.SetWriteBuffer(256 * 1024)
 
 	cm.mu.Lock()
 	if cm.conn != nil {
 		cm.conn.Close()
 	}
 	cm.conn = conn
-	cm.updateState(state)
 	cm.mu.Unlock()
 
-	// Monitor connection state
-	go cm.monitorConnection(conn)
-
-	logger.Debug("Connection established on attempt %d with state %s", attempt, state)
+	cm.updateState("Connected")
+	logger.Debug("Connection established on attempt %d", attempt)
 	return nil
 }
 
@@ -226,7 +185,6 @@ func (cm *ConnManager) handleRetries() {
 				return cm.Connect(cm.ctx)
 			}
 
-			// Use backoff retry with better logging
 			retryCount := 0
 			notify := func(err error, d time.Duration) {
 				retryCount++
@@ -251,27 +209,7 @@ func (cm *ConnManager) signalRetry() {
 	}
 }
 
-func (cm *ConnManager) monitorConnection(conn *grpc.ClientConn) {
-	for {
-		state := conn.GetState()
-		if state == connectivity.TransientFailure {
-			cm.signalRetry()
-			return
-		}
-		if !conn.WaitForStateChange(cm.ctx, state) {
-			return
-		}
-		cm.updateState(state)
-	}
-}
-
-func (cm *ConnManager) SetDialOptions(opts []grpc.DialOption) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	cm.opts = opts
-}
-
-func (cm *ConnManager) GetConn() *grpc.ClientConn {
+func (cm *ConnManager) GetConn() net.Conn {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.conn
@@ -316,15 +254,13 @@ func (cm *ConnManager) StateChanges() <-chan ConnectionState {
 	return cm.stateChange
 }
 
-func (cm *ConnManager) updateState(state connectivity.State) {
-	endpoint := cm.getNextEndpoint()
-
+func (cm *ConnManager) updateState(state string) {
 	cm.mu.Lock()
 	oldState := cm.currentState.State
 	cm.currentState = ConnectionState{
 		State:       state,
 		LastChanged: time.Now(),
-		Endpoint:    endpoint,
+		Endpoint:    cm.endpoint,
 	}
 	cm.mu.Unlock()
 
@@ -335,7 +271,6 @@ func (cm *ConnManager) updateState(state connectivity.State) {
 		case <-cm.ctx.Done():
 			return
 		default:
-			// Don't warn about dropped notifications during shutdown
 			if cm.ctx.Err() == nil {
 				logger.Warn("State change notification dropped - channel full")
 			}
@@ -343,17 +278,14 @@ func (cm *ConnManager) updateState(state connectivity.State) {
 	}
 }
 
-// GetAttempts returns the number of connection attempts made
 func (cm *ConnManager) GetAttempts() int64 {
 	return atomic.LoadInt64(&cm.attempts)
 }
 
-// IsRetrying returns whether a retry operation is in progress
 func (cm *ConnManager) IsRetrying() bool {
 	return atomic.LoadInt32(&cm.retrying) == 1
 }
 
-// ResetBackoff resets the backoff to its initial state
 func (cm *ConnManager) ResetBackoff() {
 	if b, ok := cm.backoff.(*backoff.ExponentialBackOff); ok {
 		b.Reset()

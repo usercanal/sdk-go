@@ -10,30 +10,33 @@ import (
 )
 
 func main() {
-	// Initialize with struct config
+	// Initialize with proper endpoint
 	client, err := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
-		Endpoint:  "collect.usercanal.com:50051",
-		BatchSize: 100,
-		Debug:     true,
+		Endpoint:      "collect.usercanal.com:9000",
+		BatchSize:     100,
+		FlushInterval: 5 * time.Second,
+		MaxRetries:    3,
+		Debug:         true,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 	defer client.Close()
 
-	// Track a feature usage
-	err = client.Track(context.Background(), usercanal.Event{
-		UserId: "user123",
+	// Add a small delay to ensure connection is established
+	time.Sleep(2 * time.Second)
+
+	// Test connection with a simple event
+	ctx := context.Background()
+	err = client.Track(ctx, usercanal.Event{
+		UserId: "test_user",
 		Name:   usercanal.FeatureUsed,
 		Properties: usercanal.Properties{
-			"feature_name": "search",
-			"duration_ms":  1500,
-			"results":      42,
+			"test": true,
 		},
-		Timestamp: time.Now(),
 	})
 	if err != nil {
-		log.Printf("Failed to track event: %v", err)
+		log.Fatalf("Failed to send test event: %v", err)
 	}
 
 	// Track revenue
@@ -67,15 +70,11 @@ func main() {
 		log.Printf("Failed to identify user: %v", err)
 	}
 
-	// Flush any pending events
-	err = client.Flush(context.Background())
-	if err != nil {
-		log.Printf("Failed to flush events: %v", err)
+	// Flush and wait to ensure events are sent
+	if err := client.Flush(context.Background()); err != nil {
+		log.Printf("Failed to flush: %v", err)
 	}
 
-	// Wait a bit to ensure events are sent
-	time.Sleep(2 * time.Second)
-
-	// Debug, Print detailed status
+	// Print stats
 	client.DumpStatus()
 }

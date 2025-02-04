@@ -13,9 +13,9 @@ type Properties map[string]interface{}
 type Event struct {
 	ID         string
 	UserId     string
-	Name       EventName // Using EventName type instead of string
+	Name       EventName
 	Properties Properties
-	Timestamp  time.Time
+	Timestamp  time.Time `json:"timestamp,omitempty"` // Make timestamp optional
 }
 
 // Identity represents a user identification event

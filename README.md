@@ -8,7 +8,26 @@
 
 ## Overview
 
-Usercanal helps you track user behavior and business metrics across your applications with ease. Built on gRPC, our Go SDK offers efficient event tracking, automatic batching, and type-safe constants, all while providing flexibility for custom analytics.
+Usercanal is an ultra-lightweight event tracking SDK designed for maximum performance and minimal overhead. Think PostHog, but faster and lighter. Perfect for applications where performance is crucial.
+
+## Official SDKs
+| SDK | Status | Version |
+|-----|---------|---------|
+| [Go SDK](https://github.com/usercanal/sdk-go) | ✅ | v1.0 Beta |
+| [TypeScript SDK](https://github.com/usercanal/sdk-ts) | ⏳ | Soon |
+| [Swift SDK](https://github.com/usercanal/sdk-swift) | ⏳ | Soon |
+
+## Key Features
+
+- **Ultra-lightweight**: Minimal impact on your application's performance
+- **High-performance TCP communication**: Direct, efficient event delivery
+- **Automatic batching**: Smart event grouping for optimal throughput
+- **Built-in high availability**
+  - Automatic DNS-based failover
+  - Smart reconnection with exponential backoff
+  - No data loss during collector upgrades or outages
+- **Built-in support for revenue and subscription tracking** with type-safe constants
+- **User & Group Analytics** to understand user behavior and group dynamics
 
 ## Installation
 
@@ -45,28 +64,30 @@ func main() {
 }
 ```
 
-## Key Features
+### Advanced Configuration
+```go
+// Initialize with custom configuration
+canal := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
+    Endpoint:      "collect.usercanal.com:9000",
+    BatchSize:     100,
+    FlushInterval: 5 * time.Second,
+    MaxRetries:    3,
+    Debug:         true,
+})
 
-- **Efficient gRPC-based communication** for low-latency event tracking
-- **Automatic batching and retry** mechanisms for reliable data delivery
-- **Built-in high availability**
-  - Automatic DNS-based failover
-  - Smart reconnection with exponential backoff
-  - No data loss during collector upgrades or outages
-- **Built-in support for revenue and subscription tracking** with type-safe constants
-- **User & Group Analytics** to understand user behavior and group dynamics
+## Why Usercanal?
+
+- **Minimal Overhead**: Designed to be as lightweight as possible
+- **Maximum Performance**: Direct TCP communication for faster event delivery
+- **Simple Integration**: Start tracking events in minutes
+- **Type-Safe**: Built-in constants for common events
+- **Resource Efficient**: Optimized for minimal CPU and memory usage
+
 
 ## Explore More
 
 - [📚 Full Documentation](https://usercanal.com/docs/sdks/go) - Dive deeper into the SDK capabilities.
-- [🔬 API Reference](https://pkg.go.dev/github.com/usercanal/sdk-go) - Comprehensive API details.
-- [💡 Example Apps](https://github.com/usercanal/examples) - Learn from practical examples.
-- [📊 Dashboard](https://app.usercanal.com) - Manage your analytics in real-time.
-
-## Join Our Community
-
-- [Join our Discord](https://discord.gg/usercanal) to connect with other developers and get support.
-- [Contact Support](mailto:support@usercanal.com) for any questions or issues.
+- [📊 Dashboard](https://app.usercanal.com) - Manage your analytics in real-time. (coming)
 
 ## License
 

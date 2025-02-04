@@ -6,34 +6,41 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/usercanal/sdk-go/internal/logger"
-	pb "github.com/usercanal/sdk-go/proto"
+	"github.com/usercanal/sdk-go/internal/transport"
 )
 
 type Manager struct {
-	distinctID string
-	contextID  string
-	userID     string
+	distinctID []byte // 16-byte UUID
+	contextID  []byte // 16-byte UUID for session tracking
+	userID     []byte // 16-byte UUID or custom ID
 	startTime  time.Time
 	mu         sync.RWMutex
 }
 
+// uuidToBytes converts a UUID to a byte slice
+func uuidToBytes(u uuid.UUID) []byte {
+	b := make([]byte, 16)
+	copy(b, u[:])
+	return b
+}
+
 func NewManager() (*Manager, error) {
-	distinctID := uuid.New().String()
+	distinctID := uuidToBytes(uuid.New())
+	contextID := uuidToBytes(uuid.New())
 
 	mgr := &Manager{
 		distinctID: distinctID,
-		contextID:  uuid.New().String(),
+		contextID:  contextID,
 		startTime:  time.Now(),
 	}
 
-	logger.Debug("Identity manager initialized with distinctID: %s", distinctID)
+	logger.Debug("Identity manager initialized with distinctID: %x", distinctID)
 	return mgr, nil
 }
 
-func (m *Manager) EnrichEvent(event *pb.Event) *pb.Event {
+// EnrichEvent adds identity information to an event
+func (m *Manager) EnrichEvent(event *transport.Event) *transport.Event {
 	if event == nil {
 		return nil
 	}
@@ -41,55 +48,17 @@ func (m *Manager) EnrichEvent(event *pb.Event) *pb.Event {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var base *pb.MessageBase
-	switch e := event.Event.(type) {
-	case *pb.Event_Track:
-		base = e.Track.Base
-	case *pb.Event_Identify:
-		base = e.Identify.Base
-	case *pb.Event_Group:
-		base = e.Group.Base
-	case *pb.Event_Alias:
-		base = e.Alias.Base
-	}
-
-	if base == nil {
-		base = &pb.MessageBase{}
-	}
-
-	// Add any missing required fields
-	if base.DistinctId == "" {
-		base.DistinctId = m.distinctID
-	}
-	if base.UserId == "" {
-		base.UserId = m.userID
-	}
-	if base.ContextId == "" {
-		base.ContextId = m.contextID
-	}
-	if base.MessageId == "" {
-		base.MessageId = uuid.New().String()
-	}
-	if base.Timestamp == nil {
-		base.Timestamp = timestamppb.Now()
-	}
-
-	// Update the base in the appropriate event type
-	switch e := event.Event.(type) {
-	case *pb.Event_Track:
-		e.Track.Base = base
-	case *pb.Event_Identify:
-		e.Identify.Base = base
-	case *pb.Event_Group:
-		e.Group.Base = base
-	case *pb.Event_Alias:
-		e.Alias.Base = base
+	// If no user ID is set, use distinct ID
+	if len(event.UserID) == 0 {
+		event.UserID = make([]byte, len(m.distinctID))
+		copy(event.UserID, m.distinctID)
 	}
 
 	return event
 }
 
-func (m *Manager) EnrichIdentity(event *pb.Event) *pb.Event {
+// EnrichIdentify handles identity events and updates internal state
+func (m *Manager) EnrichIdentify(event *transport.Event) *transport.Event {
 	if event == nil {
 		return nil
 	}
@@ -97,41 +66,81 @@ func (m *Manager) EnrichIdentity(event *pb.Event) *pb.Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if e, ok := event.Event.(*pb.Event_Identify); ok {
-		if e.Identify != nil && e.Identify.Base != nil && e.Identify.Base.UserId != "" {
-			m.userID = e.Identify.Base.UserId
-			logger.Debug("Updated user ID to: %s", m.userID)
-		}
+	// Update internal user ID if provided
+	if len(event.UserID) > 0 {
+		m.userID = make([]byte, len(event.UserID))
+		copy(m.userID, event.UserID)
+		logger.Debug("Updated user ID to: %x", m.userID)
 	}
 
-	return m.EnrichEvent(event)
+	return event
 }
 
-func (m *Manager) EnrichGroup(event *pb.Event) *pb.Event {
+// EnrichGroup adds user identity to group events
+func (m *Manager) EnrichGroup(event *transport.Event) *transport.Event {
 	if event == nil {
 		return nil
 	}
 
-	if e, ok := event.Event.(*pb.Event_Group); ok {
-		if e.Group != nil && e.Group.Base == nil {
-			e.Group.Base = &pb.MessageBase{}
-		}
-		if e.Group != nil && e.Group.Base != nil && e.Group.Base.UserId == "" {
-			m.mu.RLock()
-			e.Group.Base.UserId = m.userID
-			m.mu.RUnlock()
-		}
+	m.mu.RLock()
+	// If we have a user ID, ensure it's included
+	if len(m.userID) > 0 && len(event.UserID) == 0 {
+		event.UserID = make([]byte, len(m.userID))
+		copy(event.UserID, m.userID)
 	}
+	m.mu.RUnlock()
 
 	return m.EnrichEvent(event)
 }
 
-func (m *Manager) GetIdentity() (string, string, string) {
+// GetIdentity returns the current identity state
+func (m *Manager) GetIdentity() (distinctID, userID, contextID []byte) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.distinctID, m.userID, m.contextID
+
+	distinctID = make([]byte, len(m.distinctID))
+	copy(distinctID, m.distinctID)
+
+	if len(m.userID) > 0 {
+		userID = make([]byte, len(m.userID))
+		copy(userID, m.userID)
+	}
+
+	contextID = make([]byte, len(m.contextID))
+	copy(contextID, m.contextID)
+
+	return
 }
 
+// GetSessionDuration returns the current session duration
 func (m *Manager) GetSessionDuration() time.Duration {
 	return time.Since(m.startTime)
+}
+
+// GenerateEventID creates a new UUID for event tracking
+func (m *Manager) GenerateEventID() []byte {
+	return uuidToBytes(uuid.New())
+}
+
+// SetUserID allows manual setting of user ID
+func (m *Manager) SetUserID(id []byte) {
+	if len(id) == 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.userID = make([]byte, len(id))
+	copy(m.userID, id)
+}
+
+// Reset clears the user ID but maintains the distinct ID
+func (m *Manager) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.userID = nil
+	m.contextID = uuidToBytes(uuid.New())
+	m.startTime = time.Now()
 }

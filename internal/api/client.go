@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultEndpoint      = "127.0.0.1:50051"
+	defaultEndpoint      = "collect.usercanal.com:9000"
 	defaultBatchSize     = 100
 	defaultFlushInterval = 10 * time.Second
 	defaultMaxRetries    = 3
@@ -165,12 +165,12 @@ func (c *Client) Track(ctx context.Context, event types.Event) error {
 		event.Timestamp = time.Now()
 	}
 
-	protoEvent, err := convert.EventToProto(&event)
+	transportEvent, err := convert.EventToInternal(&event)
 	if err != nil {
 		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	if err := c.batcher.Add(ctx, protoEvent); err != nil {
+	if err := c.batcher.Add(ctx, transportEvent); err != nil {
 		return fmt.Errorf("failed to add event: %w", err)
 	}
 
@@ -187,12 +187,12 @@ func (c *Client) Identify(ctx context.Context, identity types.Identity) error {
 		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	protoEvent, err := convert.IdentityToProto(&identity)
+	transportEvent, err := convert.IdentityToInternal(&identity)
 	if err != nil {
 		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	if err := c.batcher.Add(ctx, protoEvent); err != nil {
+	if err := c.batcher.Add(ctx, transportEvent); err != nil {
 		return fmt.Errorf("failed to add identity event: %w", err)
 	}
 
@@ -209,12 +209,12 @@ func (c *Client) Group(ctx context.Context, groupInfo types.GroupInfo) error {
 		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	protoEvent, err := convert.GroupToProto(&groupInfo)
+	transportEvent, err := convert.GroupToInternal(&groupInfo)
 	if err != nil {
 		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	if err := c.batcher.Add(ctx, protoEvent); err != nil {
+	if err := c.batcher.Add(ctx, transportEvent); err != nil {
 		return fmt.Errorf("failed to add group event: %w", err)
 	}
 
@@ -231,37 +231,16 @@ func (c *Client) Revenue(ctx context.Context, rev types.Revenue) error {
 		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	event := types.Event{
-		UserId: rev.OrderID,
-		Name:   types.OrderCompleted,
-		Properties: types.Properties{
-			"order_id": rev.OrderID,
-			"revenue":  rev.Amount,
-			"currency": rev.Currency,
-			"type":     rev.Type,
-		},
-		Timestamp: time.Now(),
+	transportEvent, err := convert.RevenueToInternal(&rev)
+	if err != nil {
+		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
 	}
 
-	if len(rev.Products) > 0 {
-		products := make([]map[string]interface{}, len(rev.Products))
-		for i, p := range rev.Products {
-			products[i] = map[string]interface{}{
-				"id":       p.ID,
-				"name":     p.Name,
-				"price":    p.Price,
-				"quantity": p.Quantity,
-			}
-		}
-		event.Properties["products"] = products
+	if err := c.batcher.Add(ctx, transportEvent); err != nil {
+		return fmt.Errorf("failed to add revenue event: %w", err)
 	}
 
-	// Merge additional properties
-	for k, v := range rev.Properties {
-		event.Properties[k] = v
-	}
-
-	return c.Track(ctx, event)
+	return nil
 }
 
 // Flush forces a flush of any pending events

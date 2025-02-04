@@ -1,15 +1,16 @@
+// transport/sender.go
 package transport
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"sync"
 	"time"
 
-	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/metadata"
-
+	flatbuffers "github.com/google/flatbuffers/go"
+	event_collector "github.com/usercanal/sdk-go/internal/event"
 	"github.com/usercanal/sdk-go/internal/logger"
-	pb "github.com/usercanal/sdk-go/proto"
 	"github.com/usercanal/sdk-go/types"
 )
 
@@ -26,8 +27,7 @@ type Metrics struct {
 // Sender handles event sending and metrics
 type Sender struct {
 	connMgr   *ConnManager
-	client    pb.EventServiceClient
-	apiKey    string
+	apiKey    []byte
 	startTime time.Time
 	metrics   Metrics
 	mu        sync.RWMutex
@@ -47,6 +47,12 @@ func NewSender(apiKey, endpoint string) (*Sender, error) {
 		return nil, types.NewValidationError("endpoint", "cannot be empty")
 	}
 
+	// Convert hex API key to bytes
+	apiKeyBytes, err := hex.DecodeString(apiKey)
+	if err != nil {
+		return nil, types.NewValidationError("apiKey", "invalid format")
+	}
+
 	logger.Debug("Creating new sender for endpoint: %s", endpoint)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,7 +62,7 @@ func NewSender(apiKey, endpoint string) (*Sender, error) {
 
 	s := &Sender{
 		connMgr:   connMgr,
-		apiKey:    apiKey,
+		apiKey:    apiKeyBytes,
 		startTime: time.Now(),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -71,22 +77,11 @@ func NewSender(apiKey, endpoint string) (*Sender, error) {
 		}
 	}
 
-	// Initialize client
-	s.updateClient()
-
 	// Start state monitoring
 	s.wg.Add(1)
 	go s.monitorStateChanges()
 
 	return s, nil
-}
-
-func (s *Sender) updateClient() {
-	if conn := s.connMgr.GetConn(); conn != nil {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.client = pb.NewEventServiceClient(conn)
-	}
 }
 
 func (s *Sender) monitorStateChanges() {
@@ -100,16 +95,35 @@ func (s *Sender) monitorStateChanges() {
 			if !ok {
 				return
 			}
-			if state.State == connectivity.Ready {
-				s.updateClient()
-			}
+			logger.Debug("Connection state changed: %s", state.State)
 		}
 	}
 }
 
-func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
+// Event represents the internal event format for sending
+type Event struct {
+	Timestamp uint64
+	EventType event_collector.EventType
+	UserID    []byte
+	Payload   []byte
+}
+
+func (s *Sender) Send(ctx context.Context, events []*Event) error {
 	if len(events) == 0 {
 		return nil
+	}
+
+	// Validate events
+	for _, evt := range events {
+		if evt.Timestamp == 0 {
+			return types.NewValidationError("Timestamp", "is required")
+		}
+		if len(evt.UserID) == 0 {
+			return types.NewValidationError("UserID", "is required")
+		}
+		if len(evt.Payload) == 0 {
+			return types.NewValidationError("Payload", "is required")
+		}
 	}
 
 	select {
@@ -118,27 +132,61 @@ func (s *Sender) Send(ctx context.Context, events []*pb.Event) error {
 	default:
 	}
 
-	// Add API key to context
-	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		"x-api-key": s.apiKey,
-	}))
+	builder := flatbuffers.NewBuilder(1024 * len(events))
 
-	// Create batch request
-	req := &pb.BatchRequest{
-		Events: events,
+	// Create events vector
+	eventOffsets := make([]flatbuffers.UOffsetT, len(events))
+	for i := len(events) - 1; i >= 0; i-- {
+		evt := events[i]
+
+		payloadOffset := builder.CreateByteVector(evt.Payload)
+		userIDOffset := builder.CreateByteVector(evt.UserID)
+
+		event_collector.EventStart(builder)
+		event_collector.EventAddTimestamp(builder, evt.Timestamp)
+		event_collector.EventAddEventType(builder, evt.EventType)
+		event_collector.EventAddUserId(builder, userIDOffset)
+		event_collector.EventAddPayload(builder, payloadOffset)
+		eventOffsets[i] = event_collector.EventEnd(builder)
 	}
 
-	// Get client
-	s.mu.RLock()
-	client := s.client
-	s.mu.RUnlock()
+	eventsVec := builder.CreateVectorOfTables(eventOffsets)
 
-	if client == nil {
-		return types.NewValidationError("client", "not initialized")
+	// Create API key vector
+	apiKeyOffset := builder.CreateByteVector(s.apiKey)
+
+	// Create batch
+	event_collector.EventBatchStart(builder)
+	event_collector.EventBatchAddApiKey(builder, apiKeyOffset)
+	event_collector.EventBatchAddEvents(builder, eventsVec)
+	batchEnd := event_collector.EventBatchEnd(builder)
+
+	builder.Finish(batchEnd)
+	data := builder.FinishedBytes()
+
+	// Send length-prefixed message
+	lenBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(lenBuf, uint32(len(data)))
+
+	frame := make([]byte, len(lenBuf)+len(data))
+	copy(frame, lenBuf)
+	copy(frame[len(lenBuf):], data)
+
+	// Get connection and send
+	conn := s.connMgr.GetConn()
+	if conn == nil {
+		s.recordFailure()
+		return &types.NetworkError{
+			Operation: "Send",
+			Message:   "no active connection",
+		}
 	}
 
-	// Send batch
-	_, err := client.SendBatch(ctx, req)
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetWriteDeadline(deadline)
+	}
+
+	_, err := conn.Write(frame)
 	if err != nil {
 		s.recordFailure()
 		return &types.NetworkError{
@@ -176,7 +224,7 @@ func (s *Sender) GetMetrics() Metrics {
 }
 
 func (s *Sender) State() string {
-	return s.connMgr.GetState().State.String()
+	return s.connMgr.GetState().State
 }
 
 func (s *Sender) Uptime() time.Duration {
