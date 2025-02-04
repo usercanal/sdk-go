@@ -86,8 +86,7 @@ canal := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
 
 
 ## Explore More
-
-- [📚 Full Documentation](https://usercanal.com/docs/sdks/go) - Dive deeper into the SDK capabilities.
+- [📚 Full Documentation](https://docs.usercanal.com/docs/SDKs/go) - Dive deeper into the SDK capabilities.
 - [📊 Dashboard](https://app.usercanal.com) - Manage your analytics in real-time. (coming)
 
 ## License
