@@ -74,6 +74,7 @@ canal := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
     MaxRetries:    3,
     Debug:         true,
 })
+```
 
 ## Why Usercanal?
 
