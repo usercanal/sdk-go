@@ -293,7 +293,7 @@ func (c *Client) Close() error {
 	var flushErr error
 	if err := c.Flush(ctx); err != nil {
 		flushErr = fmt.Errorf("failed to flush events during shutdown: %w", err)
-		logger.Warn(flushErr.Error())
+		// logger.Warn(flushErr.Error())
 	}
 
 	// Close the sender
