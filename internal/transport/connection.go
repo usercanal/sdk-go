@@ -1,4 +1,4 @@
-// transport/connection.go
+// sdk-go/internal/transport/connection.go
 package transport
 
 import (
@@ -14,7 +14,14 @@ import (
 	"github.com/usercanal/sdk-go/types"
 )
 
-const defaultTCPPort = "9000"
+const (
+	defaultTCPPort = "9000"
+	// Size limits for critical environments
+	MaxBatchSize  = 10 * 1024 * 1024 // 10MB max batch
+	MaxEventSize  = 1 * 1024 * 1024  // 1MB max event
+	MaxLogSize    = 1 * 1024 * 1024  // 1MB max log
+	MaxBatchItems = 1000             // Max items per batch
+)
 
 var ErrConnectionClosed = types.NewValidationError("connection", "is closed")
 
@@ -40,10 +47,11 @@ type ConnManager struct {
 	mu             sync.RWMutex
 
 	// Retry handling
-	backoff     backoff.BackOff
-	attempts    int64 // using atomic for thread safety
-	retrying    int32 // atomic flag for retry status
-	retrySignal chan struct{}
+	backoff        backoff.BackOff
+	attempts       int64 // using atomic for thread safety
+	retrying       int32 // atomic flag for retry status
+	retrySignal    chan struct{}
+	reconnectCount int64 // Track reconnections
 
 	// Lifecycle management
 	ctx    context.Context
@@ -152,20 +160,53 @@ func (cm *ConnManager) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to %s: %w", endpoint, err)
 	}
 
-	// Configure TCP connection
+	// Configure TCP connection for high performance
 	tcpConn := conn.(*net.TCPConn)
 	tcpConn.SetNoDelay(true)
-	tcpConn.SetWriteBuffer(256 * 1024)
+	tcpConn.SetWriteBuffer(512 * 1024) // Increased for high throughput
+	tcpConn.SetReadBuffer(64 * 1024)
 
 	cm.mu.Lock()
-	if cm.conn != nil {
-		cm.conn.Close()
-	}
+	oldConn := cm.conn
 	cm.conn = conn
 	cm.mu.Unlock()
 
+	// Close old connection if it exists
+	if oldConn != nil {
+		oldConn.Close()
+		atomic.AddInt64(&cm.reconnectCount, 1)
+	}
+
 	cm.updateState("Connected")
 	logger.Debug("Connection established on attempt %d", attempt)
+	return nil
+}
+
+// HealthCheck verifies connection is still alive
+func (cm *ConnManager) HealthCheck() error {
+	cm.mu.RLock()
+	conn := cm.conn
+	cm.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("no connection")
+	}
+
+	// Set a short deadline for health check
+	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	defer conn.SetReadDeadline(time.Time{})
+
+	// Try to read from connection (should timeout immediately if healthy)
+	buf := make([]byte, 1)
+	_, err := conn.Read(buf)
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return nil // Timeout is expected for healthy connection
+		}
+		logger.Warn("Health check failed: %v", err)
+		cm.signalRetry() // Trigger reconnection
+		return err
+	}
 	return nil
 }
 
@@ -219,6 +260,10 @@ func (cm *ConnManager) isClosed() bool {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.ctx.Err() != nil
+}
+
+func (cm *ConnManager) GetReconnectCount() int64 {
+	return atomic.LoadInt64(&cm.reconnectCount)
 }
 
 func (cm *ConnManager) Close() error {

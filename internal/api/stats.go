@@ -11,17 +11,35 @@ func (c *Client) GetStats() types.Stats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	metrics := c.sender.GetMetrics()
+	// Get transport-level metrics
+	transportMetrics := c.sender.GetMetrics()
 
+	// Get connection state (would need to add this method)
+	// connInfo := c.sender.GetConnectionInfo()
+
+	// Compose client-level stats from multiple sources
 	return types.Stats{
-		EventsInQueue:    int64(c.batcher.QueueSize()),
-		EventsSent:       metrics.EventsSent,
-		EventsFailed:     metrics.FailedAttempts,
+		// Queue info from batch managers
+		EventsInQueue: int64(c.eventBatcher.QueueSize()),
+		LogsInQueue:   int64(c.logBatcher.QueueSize()),
+
+		// Summary from transport metrics
+		EventsSent:   transportMetrics.EventsSent,
+		LogsSent:     transportMetrics.LogsSent,
+		EventsFailed: transportMetrics.FailedAttempts,
+
+		// Connection from transport
 		ConnectionState:  c.sender.State(),
-		ConnectionUptime: c.sender.Uptime(),
-		LastFlushTime:    c.batcher.LastFlushTime(),
-		LastFailureTime:  metrics.LastFailureTime,
-		AverageBatchSize: metrics.AverageBatchSize,
+		ConnectionUptime: transportMetrics.ConnectionUptime,
+
+		// Timing from various sources
+		LastFlushTime:    c.eventBatcher.LastFlushTime(),   // Client-level timing
+		LastFailureTime:  transportMetrics.LastFailureTime, // Transport-level timing
+		AverageBatchSize: (transportMetrics.AverageEventBatchSize + transportMetrics.AverageLogBatchSize) / 2,
+
+		// Client config
+		ActiveEndpoint: c.cfg.endpoint,
+		// DNS info would come from connection manager when available
 	}
 }
 

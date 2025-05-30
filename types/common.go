@@ -1,7 +1,10 @@
-// types/errors.go
+// sdk-go/types/common.go
 package types
 
 import "fmt"
+
+// Properties represents a map of property values
+type Properties map[string]interface{}
 
 // Common error types
 var (

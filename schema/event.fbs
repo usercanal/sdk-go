@@ -1,5 +1,8 @@
 // schema/event.fbs
-namespace event_collector;
+// Purpose: Events are used for cdp/product analytics
+include "common.fbs";
+
+namespace schema.event;
 
 /// Event types for different processing paths
 enum EventType:uint32 {
@@ -11,21 +14,19 @@ enum EventType:uint32 {
     ENRICH = 5                          // Generic entity enrichment
 }
 
-/// Single event in the CDP system
+// Single event in the CDP system
+//   session_id (context_id) and message_id (tracing, sorting) can be added in payload.
+//   we will test adding this through the SDKs instead.
 table Event {
     timestamp:uint64;                   // Unix timestamp in milliseconds
     event_type:EventType;               // Determines how payload is processed
     user_id:[ubyte] (required);         // Fixed 16-byte UUID
     payload:[ubyte] (required);         // Event data (as bytes for flexibility)
 }
-// session_id (context_id) and message_id (tracing, sorting) can be added in payload.
-// we will test adding this through the SDKs instead.
 
-
-/// All messages must be sent as EventBatch
-table EventBatch {
-    api_key:[ubyte] (required, id: 0);  // Fixed 16-byte authentication key
-    events:[Event] (required, id: 1);   // One or more events
+/// Event data container (goes in UnifiedBatch.data)
+table EventData {
+    events:[Event] (required);
 }
 
-root_type EventBatch;
+root_type EventData;

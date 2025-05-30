@@ -1,0 +1,21 @@
+// schema/common.fbs
+namespace schema.common;
+
+/// Schema types for routing and streaming
+enum SchemaType:uint8 {
+    UNKNOWN = 0,    // Default value required by FlatBuffers
+    EVENT = 1,      // CDP/product analytics events
+    LOG = 2,        // Optimized syslog protocol
+    METRIC = 3,     // Future: Performance metrics
+    INVENTORY = 4   // Future: Asset/service inventory
+}
+
+/// Standard batch structure for all data types
+table Batch {
+    api_key:[ubyte] (required, id: 0);  // Fixed 16-byte authentication key
+    batch_id:uint64 (id: 1);            // Optional sequence number for tracking
+    schema_type:SchemaType (id: 2);     // Schema type for routing
+    data:[ubyte] (required, id: 3);     // Schema-specific data payload
+}
+
+root_type Batch;

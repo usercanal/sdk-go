@@ -2,6 +2,14 @@
 
 This document contains information for SDK developers. For SDK users, please refer to the main README.md.
 
+To generate the flatc
+
+```bash
+flatc --go -o internal/ schema/event.fbs
+flatc --go -o internal/ schema/log.fbs
+flatc --go -o internal/ schema/common.fbs
+```
+
 ## Project Structure
 
 ### Core SDK Package (`go-sdk/usercanal/`)

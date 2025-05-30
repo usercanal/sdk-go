@@ -1,4 +1,4 @@
-// batch/batch.go
+// sdk-go/internal/batch/batch.go
 package batch
 
 import (
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/usercanal/sdk-go/internal/logger"
-	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
 )
 
@@ -17,15 +16,15 @@ const (
 	defaultFlushInterval = 10 * time.Second
 )
 
-// SendFunc is the function type for sending events
-type SendFunc func(context.Context, []*transport.Event) error
+// SendFunc is the function type for sending items (generic)
+type SendFunc func(context.Context, []interface{}) error
 
-// Manager handles event batching and sending
+// Manager handles batching and sending of any type of items
 type Manager struct {
 	size         int
 	interval     time.Duration
 	send         SendFunc
-	events       []*transport.Event
+	items        []interface{} // Changed from []*transport.Event to []interface{}
 	lastFlush    time.Time
 	lastFailure  time.Time
 	mu           sync.RWMutex
@@ -54,7 +53,7 @@ func NewManager(size int, interval time.Duration, send SendFunc) *Manager {
 		size:     size,
 		interval: interval,
 		send:     send,
-		events:   make([]*transport.Event, 0, size),
+		items:    make([]interface{}, 0, size), // Changed to interface{}
 		done:     make(chan struct{}),
 		ticker:   time.NewTicker(interval),
 	}
@@ -78,9 +77,10 @@ func (m *Manager) periodicFlush() {
 	}
 }
 
-func (m *Manager) Add(ctx context.Context, event *transport.Event) error {
-	if event == nil {
-		return types.NewValidationError("event", "cannot be nil")
+// Add accepts any type of item (interface{})
+func (m *Manager) Add(ctx context.Context, item interface{}) error {
+	if item == nil {
+		return types.NewValidationError("item", "cannot be nil")
 	}
 
 	select {
@@ -91,8 +91,8 @@ func (m *Manager) Add(ctx context.Context, event *transport.Event) error {
 		}
 	default:
 		m.mu.Lock()
-		m.events = append(m.events, event)
-		needsFlush := len(m.events) >= m.size
+		m.items = append(m.items, item)
+		needsFlush := len(m.items) >= m.size
 		m.mu.Unlock()
 
 		if needsFlush {
@@ -105,22 +105,22 @@ func (m *Manager) Add(ctx context.Context, event *transport.Event) error {
 
 func (m *Manager) Flush(ctx context.Context) error {
 	m.mu.Lock()
-	if len(m.events) == 0 {
+	if len(m.items) == 0 {
 		m.mu.Unlock()
 		return nil
 	}
 
-	events := m.events
-	m.events = make([]*transport.Event, 0, m.size)
+	items := m.items
+	m.items = make([]interface{}, 0, m.size) // Changed to interface{}
 	m.mu.Unlock()
 
-	if err := m.send(ctx, events); err != nil {
+	if err := m.send(ctx, items); err != nil {
 		m.mu.Lock()
-		m.failedCount += int64(len(events))
+		m.failedCount += int64(len(items))
 		m.lastFailure = time.Now()
 		m.mu.Unlock()
 
-		// Re-queue events on failure if context isn't cancelled
+		// Re-queue items on failure if context isn't cancelled
 		select {
 		case <-ctx.Done():
 			return &types.TimeoutError{
@@ -129,7 +129,7 @@ func (m *Manager) Flush(ctx context.Context) error {
 			}
 		default:
 			m.mu.Lock()
-			m.events = append(m.events, events...)
+			m.items = append(m.items, items...)
 			m.mu.Unlock()
 			return &types.NetworkError{
 				Operation: "Flush",
@@ -139,19 +139,18 @@ func (m *Manager) Flush(ctx context.Context) error {
 	}
 
 	m.mu.Lock()
-	m.successCount += int64(len(events))
+	m.successCount += int64(len(items))
 	m.lastFlush = time.Now()
 	m.mu.Unlock()
 
-	logger.Debug("Flushed %d events successfully", len(events))
+	logger.Debug("Flushed %d items successfully", len(items))
 	return nil
 }
 
-// The rest of the methods remain the same, just with updated comments
 func (m *Manager) QueueSize() int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return int64(len(m.events))
+	return int64(len(m.items)) // Changed from events to items
 }
 
 func (m *Manager) FailedCount() int64 {
@@ -187,19 +186,19 @@ func (m *Manager) Close() error {
 
 	queueSize := m.QueueSize()
 	if queueSize > 0 {
-		logger.Debug("Attempting to flush %d remaining events during shutdown", queueSize)
+		logger.Debug("Attempting to flush %d remaining items during shutdown", queueSize)
 	}
 
 	if err := m.Flush(ctx); err != nil {
 		return &types.NetworkError{
 			Operation: "Close",
-			Message:   fmt.Sprintf("failed to flush %d events: %v", queueSize, err),
+			Message:   fmt.Sprintf("failed to flush %d items: %v", queueSize, err),
 		}
 	}
 
-	remainingEvents := m.QueueSize()
-	if remainingEvents > 0 {
-		logger.Warn("%d events remained unflushed during shutdown", remainingEvents)
+	remainingItems := m.QueueSize()
+	if remainingItems > 0 {
+		logger.Warn("%d items remained unflushed during shutdown", remainingItems)
 	}
 
 	return nil

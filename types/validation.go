@@ -1,4 +1,4 @@
-// types/validation.go
+// sdk-go/types/validation.go
 package types
 
 import (
@@ -8,7 +8,7 @@ import (
 	"github.com/usercanal/sdk-go/internal/logger"
 )
 
-// Validate validates an Event
+// Event validation
 func (e *Event) Validate() error {
 	if e.UserId == "" {
 		return NewValidationError("UserId", "is required")
@@ -22,11 +22,10 @@ func (e *Event) Validate() error {
 	if err := validateProperties(e.Properties); err != nil {
 		return fmt.Errorf("properties validation failed: %w", err)
 	}
-	// Remove timestamp validation here
 	return nil
 }
 
-// Validate validates an Identity
+// Identity validation
 func (i *Identity) Validate() error {
 	if i.UserId == "" {
 		return NewValidationError("UserId", "is required")
@@ -37,7 +36,7 @@ func (i *Identity) Validate() error {
 	return nil
 }
 
-// Validate validates a GroupInfo
+// GroupInfo validation
 func (g *GroupInfo) Validate() error {
 	if g.UserId == "" {
 		return NewValidationError("UserId", "is required")
@@ -51,8 +50,11 @@ func (g *GroupInfo) Validate() error {
 	return nil
 }
 
-// Validate validates a Revenue
+// Revenue validation
 func (r *Revenue) Validate() error {
+	if r.UserID == "" {
+		return NewValidationError("UserID", "is required")
+	}
 	if r.OrderID == "" {
 		return NewValidationError("OrderID", "is required")
 	}
@@ -75,11 +77,10 @@ func (r *Revenue) Validate() error {
 	if err := validateProperties(r.Properties); err != nil {
 		return fmt.Errorf("properties validation failed: %w", err)
 	}
-
 	return nil
 }
 
-// Validate validates a Product
+// Product validation
 func (p *Product) Validate() error {
 	if p.ID == "" {
 		return NewValidationError("ID", "is required")
@@ -93,7 +94,27 @@ func (p *Product) Validate() error {
 	return nil
 }
 
-// validateProperties checks if properties contain valid values
+// LogEntry validation
+func (l *LogEntry) Validate() error {
+	if l.Level > LogTrace {
+		return NewValidationError("Level", "invalid log level")
+	}
+	if l.EventType > LogAuth {
+		return NewValidationError("EventType", "invalid log event type")
+	}
+	if l.Service == "" {
+		return NewValidationError("Service", "is required")
+	}
+	if l.Source == "" {
+		return NewValidationError("Source", "is required")
+	}
+	if l.Message == "" && len(l.Data) == 0 {
+		return NewValidationError("Content", "either Message or Data is required")
+	}
+	return nil
+}
+
+// Helper validation functions
 func validateProperties(props Properties) error {
 	if props == nil {
 		return nil
@@ -108,11 +129,9 @@ func validateProperties(props Properties) error {
 			return fmt.Errorf("property '%s' validation failed: %w", key, err)
 		}
 	}
-
 	return nil
 }
 
-// validatePropertyValue checks if a property value is of a supported type
 func validatePropertyValue(value interface{}) error {
 	switch v := value.(type) {
 	case nil:

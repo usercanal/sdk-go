@@ -1,41 +1,39 @@
-// transport/sender.go
+// sdk-go/internal/transport/sender.go
 package transport
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
 	flatbuffers "github.com/google/flatbuffers/go"
-	event_collector "github.com/usercanal/sdk-go/internal/event"
 	"github.com/usercanal/sdk-go/internal/logger"
+	schema_common "github.com/usercanal/sdk-go/internal/schema/common"
 	"github.com/usercanal/sdk-go/types"
 )
 
-// Metrics tracks sending statistics
-type Metrics struct {
-	EventsSent       int64
-	BatchesSent      int64
-	FailedAttempts   int64
-	LastSendTime     time.Time
-	LastFailureTime  time.Time
-	AverageBatchSize float64
-}
-
-// Sender handles event sending and metrics
+// Sender handles data sending and metrics
 type Sender struct {
 	connMgr   *ConnManager
 	apiKey    []byte
 	startTime time.Time
-	metrics   Metrics
+	metrics   types.TransportMetrics
 	mu        sync.RWMutex
 
 	// Lifecycle
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+}
+
+func generateBatchID() uint64 {
+	var id uint64
+	binary.Read(rand.Reader, binary.BigEndian, &id)
+	return id
 }
 
 func NewSender(apiKey, endpoint string) (*Sender, error) {
@@ -100,70 +98,32 @@ func (s *Sender) monitorStateChanges() {
 	}
 }
 
-// Event represents the internal event format for sending
-type Event struct {
-	Timestamp uint64
-	EventType event_collector.EventType
-	UserID    []byte
-	Payload   []byte
+func (s *Sender) sendBatch(ctx context.Context, schemaType schema_common.SchemaType, data []byte) error {
+	// Size validation for critical environments
+	if len(data) > MaxBatchSize {
+		return types.NewValidationError("batch", fmt.Sprintf("batch size %d exceeds limit %d", len(data), MaxBatchSize))
+	}
+
+	builder := flatbuffers.NewBuilder(1024)
+
+	batchID := generateBatchID()
+	apiKeyOffset := builder.CreateByteVector(s.apiKey)
+	dataOffset := builder.CreateByteVector(data)
+
+	schema_common.BatchStart(builder)
+	schema_common.BatchAddApiKey(builder, apiKeyOffset)
+	schema_common.BatchAddBatchId(builder, batchID)
+	schema_common.BatchAddSchemaType(builder, schemaType)
+	schema_common.BatchAddData(builder, dataOffset)
+	batchOffset := schema_common.BatchEnd(builder)
+
+	builder.Finish(batchOffset)
+	finalData := builder.FinishedBytes()
+
+	return s.sendFrame(ctx, finalData)
 }
 
-func (s *Sender) Send(ctx context.Context, events []*Event) error {
-	if len(events) == 0 {
-		return nil
-	}
-
-	// Validate events
-	for _, evt := range events {
-		if evt.Timestamp == 0 {
-			return types.NewValidationError("Timestamp", "is required")
-		}
-		if len(evt.UserID) == 0 {
-			return types.NewValidationError("UserID", "is required")
-		}
-		if len(evt.Payload) == 0 {
-			return types.NewValidationError("Payload", "is required")
-		}
-	}
-
-	select {
-	case <-s.ctx.Done():
-		return types.NewValidationError("sender", "is shutting down")
-	default:
-	}
-
-	builder := flatbuffers.NewBuilder(1024 * len(events))
-
-	// Create events vector
-	eventOffsets := make([]flatbuffers.UOffsetT, len(events))
-	for i := len(events) - 1; i >= 0; i-- {
-		evt := events[i]
-
-		payloadOffset := builder.CreateByteVector(evt.Payload)
-		userIDOffset := builder.CreateByteVector(evt.UserID)
-
-		event_collector.EventStart(builder)
-		event_collector.EventAddTimestamp(builder, evt.Timestamp)
-		event_collector.EventAddEventType(builder, evt.EventType)
-		event_collector.EventAddUserId(builder, userIDOffset)
-		event_collector.EventAddPayload(builder, payloadOffset)
-		eventOffsets[i] = event_collector.EventEnd(builder)
-	}
-
-	eventsVec := builder.CreateVectorOfTables(eventOffsets)
-
-	// Create API key vector
-	apiKeyOffset := builder.CreateByteVector(s.apiKey)
-
-	// Create batch
-	event_collector.EventBatchStart(builder)
-	event_collector.EventBatchAddApiKey(builder, apiKeyOffset)
-	event_collector.EventBatchAddEvents(builder, eventsVec)
-	batchEnd := event_collector.EventBatchEnd(builder)
-
-	builder.Finish(batchEnd)
-	data := builder.FinishedBytes()
-
+func (s *Sender) sendFrame(ctx context.Context, data []byte) error {
 	// Send length-prefixed message
 	lenBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(lenBuf, uint32(len(data)))
@@ -172,13 +132,25 @@ func (s *Sender) Send(ctx context.Context, events []*Event) error {
 	copy(frame, lenBuf)
 	copy(frame[len(lenBuf):], data)
 
-	// Get connection and send
+	// Get connection and send with graceful retry
 	conn := s.connMgr.GetConn()
 	if conn == nil {
-		s.recordFailure()
-		return &types.NetworkError{
-			Operation: "Send",
-			Message:   "no active connection",
+		// Try to reconnect once for immediate recovery
+		logger.Debug("No connection available, attempting immediate reconnect")
+		if err := s.connMgr.Connect(ctx); err != nil {
+			s.recordFailure()
+			return &types.NetworkError{
+				Operation: "Send",
+				Message:   "no active connection and reconnect failed: " + err.Error(),
+			}
+		}
+		conn = s.connMgr.GetConn()
+		if conn == nil {
+			s.recordFailure()
+			return &types.NetworkError{
+				Operation: "Send",
+				Message:   "connection still unavailable after reconnect",
+			}
 		}
 	}
 
@@ -189,24 +161,57 @@ func (s *Sender) Send(ctx context.Context, events []*Event) error {
 	_, err := conn.Write(frame)
 	if err != nil {
 		s.recordFailure()
+		// Signal retry for connection issues
+		s.connMgr.signalRetry()
 		return &types.NetworkError{
 			Operation: "Send",
 			Message:   err.Error(),
 		}
 	}
 
-	s.recordSuccess(len(events))
+	// Record bytes sent for metrics
+	s.recordBytesSent(len(frame))
 	return nil
 }
 
-func (s *Sender) recordSuccess(eventCount int) {
+func (s *Sender) recordEventSuccess(eventCount int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.metrics.EventsSent += int64(eventCount)
-	s.metrics.BatchesSent++
+	s.metrics.EventBatchesSent++
+	s.metrics.TotalBatchesSent++
 	s.metrics.LastSendTime = time.Now()
-	s.metrics.AverageBatchSize = float64(s.metrics.EventsSent) / float64(s.metrics.BatchesSent)
+	s.metrics.ConnectionUptime = s.Uptime()
+	s.metrics.ReconnectCount = s.connMgr.GetReconnectCount()
+
+	// Calculate separate averages
+	if s.metrics.EventBatchesSent > 0 {
+		s.metrics.AverageEventBatchSize = float64(s.metrics.EventsSent) / float64(s.metrics.EventBatchesSent)
+	}
+}
+
+func (s *Sender) recordLogSuccess(logCount int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.metrics.LogsSent += int64(logCount)
+	s.metrics.LogBatchesSent++
+	s.metrics.TotalBatchesSent++
+	s.metrics.LastSendTime = time.Now()
+	s.metrics.ConnectionUptime = s.Uptime()
+	s.metrics.ReconnectCount = s.connMgr.GetReconnectCount()
+
+	// Calculate separate averages
+	if s.metrics.LogBatchesSent > 0 {
+		s.metrics.AverageLogBatchSize = float64(s.metrics.LogsSent) / float64(s.metrics.LogBatchesSent)
+	}
+}
+
+func (s *Sender) recordBytesSent(bytes int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.metrics.BytesSent += int64(bytes)
 }
 
 func (s *Sender) recordFailure() {
@@ -217,7 +222,7 @@ func (s *Sender) recordFailure() {
 	s.metrics.LastFailureTime = time.Now()
 }
 
-func (s *Sender) GetMetrics() Metrics {
+func (s *Sender) GetMetrics() types.TransportMetrics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.metrics
@@ -229,6 +234,11 @@ func (s *Sender) State() string {
 
 func (s *Sender) Uptime() time.Duration {
 	return time.Since(s.startTime)
+}
+
+// HealthCheck performs connection health check
+func (s *Sender) HealthCheck() error {
+	return s.connMgr.HealthCheck()
 }
 
 func (s *Sender) Close() error {

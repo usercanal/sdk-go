@@ -24,6 +24,10 @@ type Client struct {
 	internal *api.Client
 }
 
+func (c *Client) GetStats() Stats {
+	return c.internal.GetStats()
+}
+
 // NewClient creates a new client with configuration
 func NewClient(apiKey string, cfg ...Config) (*Client, error) {
 	var options []api.Option
@@ -47,6 +51,7 @@ func NewClient(apiKey string, cfg ...Config) (*Client, error) {
 	return &Client{internal: client}, nil
 }
 
+// Event protocl
 // Re-export main client methods
 func (c *Client) Track(ctx context.Context, event Event) error {
 	return c.internal.Track(ctx, event)
@@ -85,6 +90,7 @@ type (
 	Revenue    = types.Revenue
 	Product    = types.Product
 	Currency   = types.Currency
+	Stats      = types.Stats
 )
 
 // Re-export constants
@@ -118,6 +124,53 @@ const (
 
 	// Payment methods
 	PaymentMethodCard = types.PaymentMethodCard
+)
+
+// Logging protocol
+func (c *Client) Log(ctx context.Context, entry LogEntry) error {
+	return c.internal.Log(ctx, entry)
+}
+
+func (c *Client) LogInfo(ctx context.Context, service, source, message string, data map[string]interface{}) error {
+	return c.internal.LogInfo(ctx, service, source, message, data)
+}
+
+func (c *Client) LogError(ctx context.Context, service, source, message string, data map[string]interface{}) error {
+	return c.internal.LogError(ctx, service, source, message, data)
+}
+
+func (c *Client) LogDebug(ctx context.Context, service, source, message string, data map[string]interface{}) error {
+	return c.internal.LogDebug(ctx, service, source, message, data)
+}
+
+func (c *Client) LogBatch(ctx context.Context, entries []LogEntry) error {
+	return c.internal.LogBatch(ctx, entries)
+}
+
+// Re-export log types
+type (
+	LogEntry     = types.LogEntry
+	LogLevel     = types.LogLevel
+	LogEventType = types.LogEventType
+)
+
+// Re-export log constants
+const (
+	// Log levels
+	LogEmergency = types.LogEmergency
+	LogAlert     = types.LogAlert
+	LogCritical  = types.LogCritical
+	LogError     = types.LogError
+	LogWarning   = types.LogWarning
+	LogNotice    = types.LogNotice
+	LogInfo      = types.LogInfo
+	LogDebug     = types.LogDebug
+	LogTrace     = types.LogTrace
+
+	// Log event types
+	LogCollect = types.LogCollect
+	LogEnrich  = types.LogEnrich
+	LogAuth    = types.LogAuth
 )
 
 // Version returns detailed version information

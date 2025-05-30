@@ -1,21 +1,30 @@
-// types/stats.go
+// sdk-go/types/stats.go - Client-facing stats assembled from multiple sources
 package types
 
 import "time"
 
-// Stats represents client statistics
 type Stats struct {
-	EventsInQueue    int64
-	EventsSent       int64
-	EventsFailed     int64
+	// Client queue state (from batch managers)
+	EventsInQueue int64
+	LogsInQueue   int64
+
+	// Summary counters (from transport metrics)
+	EventsSent   int64
+	LogsSent     int64
+	EventsFailed int64
+
+	// Client connection view
 	ConnectionState  string
 	ConnectionUptime time.Duration
+
+	// Client timing (from batch managers + transport)
 	LastFlushTime    time.Time
 	LastFailureTime  time.Time
 	AverageBatchSize float64
 
-	ActiveEndpoint    string    // Current endpoint being used
-	ResolvedEndpoints []string  // All available endpoints
-	LastDNSResolution time.Time // Last successful DNS resolution
-	DNSFailures       int64     // Number of DNS resolution failures
+	// Client network view (from connection manager + config)
+	ActiveEndpoint    string
+	ResolvedEndpoints []string
+	LastDNSResolution time.Time
+	DNSFailures       int64
 }

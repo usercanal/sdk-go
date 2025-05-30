@@ -1,6 +1,7 @@
-// types/event_types.go
-
+// sdk-go/types/events.go
 package types
+
+import "time"
 
 // EventName represents a strongly typed event name
 type EventName string
@@ -54,24 +55,52 @@ const (
 	CurrencyGBP Currency = "GBP"
 )
 
-// IsStandardEvent checks if the event name is a known standard event
-func (e EventName) IsStandardEvent() bool {
-	switch e {
-	case UserSignedUp, UserLoggedIn, FeatureUsed,
-		OrderCompleted, SubscriptionStarted, SubscriptionChanged,
-		SubscriptionCanceled, CartViewed, CheckoutStarted,
-		CheckoutCompleted:
-		return true
-	}
-	return false
+// Event represents a tracking event
+type Event struct {
+	ID         string
+	UserId     string
+	Name       EventName
+	Properties Properties
+	Timestamp  time.Time `json:"timestamp,omitempty"`
 }
 
-// String returns the string representation of the event name
+// Identity represents a user identification event
+type Identity struct {
+	UserId     string
+	Properties Properties
+}
+
+// GroupInfo represents a group event
+type GroupInfo struct {
+	UserId     string
+	GroupId    string
+	Properties Properties
+}
+
+// Revenue represents a revenue event
+type Revenue struct {
+	UserID     string
+	OrderID    string
+	Amount     float64
+	Currency   Currency
+	Type       RevenueType
+	Products   []Product
+	Properties Properties
+}
+
+// Product represents a product in a revenue event
+type Product struct {
+	ID       string
+	Name     string
+	Price    float64
+	Quantity int
+}
+
+// String methods
 func (e EventName) String() string {
 	return string(e)
 }
 
-// String methods for custom types
 func (r RevenueType) String() string {
 	return string(r)
 }
@@ -86,4 +115,16 @@ func (p PaymentMethod) String() string {
 
 func (c Currency) String() string {
 	return string(c)
+}
+
+// IsStandardEvent checks if the event name is a known standard event
+func (e EventName) IsStandardEvent() bool {
+	switch e {
+	case UserSignedUp, UserLoggedIn, FeatureUsed,
+		OrderCompleted, SubscriptionStarted, SubscriptionChanged,
+		SubscriptionCanceled, CartViewed, CheckoutStarted,
+		CheckoutCompleted:
+		return true
+	}
+	return false
 }

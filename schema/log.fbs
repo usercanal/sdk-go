@@ -1,0 +1,44 @@
+// schema/log.fbs
+// Purpose: Log format are used as a optimised custom syslog protocol
+include "common.fbs";
+
+namespace schema.log;
+
+/// Log severity levels (standard)
+enum LogLevel:uint8 {
+    EMERGENCY = 0,    // System is unusable
+    ALERT = 1,        // Action must be taken immediately
+    CRITICAL = 2,     // Critical conditions
+    ERROR = 3,        // Error conditions
+    WARNING = 4,      // Warning conditions
+    NOTICE = 5,       // Normal but significant condition
+    INFO = 6,         // Informational messages
+    DEBUG = 7,        // Debug-level messages
+    TRACE = 8         // Detailed tracing information
+}
+
+/// Log-specific event types
+enum LogEventType:uint32 {
+    UNKNOWN = 0,     // Default/unspecified log type
+    COLLECT = 1,     // Standard log collection
+    ENRICH = 2,      // Log enrichment/annotation
+    AUTH = 3         // Experimenetal Authentication/authorization events
+}
+
+/// Single log entry in the system
+table LogEntry {
+    event_type:LogEventType;         // Log event type - primary field for routing
+    context_id:uint64;               // Session/transaction ID for correlation and filtering
+    level:LogLevel;                  // Severity level
+    timestamp:uint64;                // Source-generated timestamp (milliseconds since epoch)
+    source:string;                   // Source hostname/instance
+    service:string;                  // Service/application name
+    payload:[ubyte];                 // Structured data as bytes
+}
+
+/// Log data container (goes in UnifiedBatch.data)
+table LogData {
+    logs:[LogEntry] (required);
+}
+
+root_type LogData;

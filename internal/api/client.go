@@ -1,4 +1,4 @@
-// api/client.go
+// sdk-go/internal/api/client.go
 package api
 
 import (
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/usercanal/sdk-go/internal/batch"
-	"github.com/usercanal/sdk-go/internal/convert"
 	"github.com/usercanal/sdk-go/internal/logger"
 	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
@@ -21,6 +20,17 @@ const (
 	defaultMaxRetries    = 3
 	defaultCloseTimeout  = 5 * time.Second
 )
+
+// Client represents an analytics client
+type Client struct {
+	cfg          *config
+	sender       *transport.Sender
+	eventBatcher *batch.Manager
+	logBatcher   *batch.Manager
+	mu           sync.RWMutex
+	closed       bool
+	closing      bool
+}
 
 // Config represents the external client configuration
 type Config struct {
@@ -113,16 +123,6 @@ func WithDebug(debug bool) Option {
 	}
 }
 
-// Client represents an analytics client
-type Client struct {
-	cfg     *config
-	sender  *transport.Sender
-	batcher *batch.Manager
-	mu      sync.RWMutex
-	closed  bool
-	closing bool
-}
-
 // New creates a new client with the provided API key and options
 func New(apiKey string, opts ...Option) (*Client, error) {
 	if apiKey == "" {
@@ -139,118 +139,57 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("failed to create sender: %w", err)
 	}
 
-	batchMgr := batch.NewManager(cfg.batchSize, cfg.flushInterval, sender.Send)
+	// Create wrapper functions to match batch.SendFunc signature
+	eventSendFunc := func(ctx context.Context, items []interface{}) error {
+		events := make([]*transport.Event, len(items))
+		for i, item := range items {
+			if event, ok := item.(*transport.Event); ok {
+				events[i] = event
+			} else {
+				return fmt.Errorf("invalid event type: %T", item)
+			}
+		}
+		return sender.SendEvents(ctx, events)
+	}
+
+	logSendFunc := func(ctx context.Context, items []interface{}) error {
+		logs := make([]*transport.Log, len(items))
+		for i, item := range items {
+			if log, ok := item.(*transport.Log); ok {
+				logs[i] = log
+			} else {
+				return fmt.Errorf("invalid log type: %T", item)
+			}
+		}
+		return sender.SendLogs(ctx, logs)
+	}
+
+	eventBatchMgr := batch.NewManager(cfg.batchSize, cfg.flushInterval, eventSendFunc)
+	logBatchMgr := batch.NewManager(cfg.batchSize, cfg.flushInterval, logSendFunc)
 
 	client := &Client{
-		cfg:     cfg,
-		sender:  sender,
-		batcher: batchMgr,
+		cfg:          cfg,
+		sender:       sender,
+		eventBatcher: eventBatchMgr,
+		logBatcher:   logBatchMgr,
 	}
 
 	return client, nil
 }
 
-// Track sends an analytics event
-func (c *Client) Track(ctx context.Context, event types.Event) error {
-	if err := c.checkClosed(); err != nil {
-		return err
-	}
-
-	if err := event.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	// Set timestamp if not set
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now()
-	}
-
-	transportEvent, err := convert.EventToInternal(&event)
-	if err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	if err := c.batcher.Add(ctx, transportEvent); err != nil {
-		return fmt.Errorf("failed to add event: %w", err)
-	}
-
-	return nil
-}
-
-// Identify associates a user with their traits
-func (c *Client) Identify(ctx context.Context, identity types.Identity) error {
-	if err := c.checkClosed(); err != nil {
-		return err
-	}
-
-	if err := identity.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	transportEvent, err := convert.IdentityToInternal(&identity)
-	if err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	if err := c.batcher.Add(ctx, transportEvent); err != nil {
-		return fmt.Errorf("failed to add identity event: %w", err)
-	}
-
-	return nil
-}
-
-// Group associates a user with a group
-func (c *Client) Group(ctx context.Context, groupInfo types.GroupInfo) error {
-	if err := c.checkClosed(); err != nil {
-		return err
-	}
-
-	if err := groupInfo.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	transportEvent, err := convert.GroupToInternal(&groupInfo)
-	if err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	if err := c.batcher.Add(ctx, transportEvent); err != nil {
-		return fmt.Errorf("failed to add group event: %w", err)
-	}
-
-	return nil
-}
-
-// Revenue tracks a revenue event
-func (c *Client) Revenue(ctx context.Context, rev types.Revenue) error {
-	if err := c.checkClosed(); err != nil {
-		return err
-	}
-
-	if err := rev.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	transportEvent, err := convert.RevenueToInternal(&rev)
-	if err != nil {
-		return fmt.Errorf("%w: %v", types.ErrInvalidInput, err)
-	}
-
-	if err := c.batcher.Add(ctx, transportEvent); err != nil {
-		return fmt.Errorf("failed to add revenue event: %w", err)
-	}
-
-	return nil
-}
-
-// Flush forces a flush of any pending events
+// Flush forces a flush of both event and log batchers
 func (c *Client) Flush(ctx context.Context) error {
 	if err := c.checkClosed(); err != nil {
 		return err
 	}
 
-	if err := c.batcher.Flush(ctx); err != nil {
+	// Flush both event and log batchers
+	if err := c.eventBatcher.Flush(ctx); err != nil {
 		return fmt.Errorf("failed to flush events: %w", err)
+	}
+
+	if err := c.logBatcher.Flush(ctx); err != nil {
+		return fmt.Errorf("failed to flush logs: %w", err)
 	}
 
 	return nil
@@ -270,7 +209,7 @@ func (c *Client) checkClosed() error {
 	return nil
 }
 
-// Close flushes pending events and closes the client
+// Close flushes pending data and closes the client
 func (c *Client) Close() error {
 	c.mu.Lock()
 	if c.closed {
@@ -292,8 +231,7 @@ func (c *Client) Close() error {
 
 	var flushErr error
 	if err := c.Flush(ctx); err != nil {
-		flushErr = fmt.Errorf("failed to flush events during shutdown: %w", err)
-		// logger.Warn(flushErr.Error())
+		flushErr = fmt.Errorf("failed to flush data during shutdown: %w", err)
 	}
 
 	// Close the sender
@@ -306,6 +244,5 @@ func (c *Client) Close() error {
 	c.closed = true
 	c.mu.Unlock()
 
-	// Return flush error if it occurred
 	return flushErr
 }
