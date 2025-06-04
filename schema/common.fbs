@@ -1,7 +1,11 @@
 // schema/common.fbs
+// Purpose: Common definitions and batch structure for all data types in the CDP system
+// This provides the top-level container format for routing different schema types
+
 namespace schema.common;
 
 /// Schema types for routing and streaming
+/// Used by the collector to determine how to process incoming data
 enum SchemaType:uint8 {
     UNKNOWN = 0,    // Default value required by FlatBuffers
     EVENT = 1,      // CDP/product analytics events
@@ -11,6 +15,8 @@ enum SchemaType:uint8 {
 }
 
 /// Standard batch structure for all data types
+/// This is the top-level container that wraps all schema-specific data
+/// Field IDs ensure forward compatibility and allow optimal field ordering
 table Batch {
     api_key:[ubyte] (required, id: 0);  // Fixed 16-byte authentication key
     batch_id:uint64 (id: 1);            // Optional sequence number for tracking

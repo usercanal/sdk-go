@@ -7,6 +7,8 @@ import (
 )
 
 /// Standard batch structure for all data types
+/// This is the top-level container that wraps all schema-specific data
+/// Field IDs ensure forward compatibility and allow optimal field ordering
 type Batch struct {
 	_tab flatbuffers.Table
 }

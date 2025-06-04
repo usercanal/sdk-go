@@ -5,6 +5,7 @@ package common
 import "strconv"
 
 /// Schema types for routing and streaming
+/// Used by the collector to determine how to process incoming data
 type SchemaType byte
 
 const (

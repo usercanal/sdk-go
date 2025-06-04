@@ -6,7 +6,8 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
-/// Log data container (goes in UnifiedBatch.data)
+/// Log data container (goes in Batch.data)
+/// Contains batched log entries for efficient network transport
 type LogData struct {
 	_tab flatbuffers.Table
 }

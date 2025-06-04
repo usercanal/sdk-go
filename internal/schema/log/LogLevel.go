@@ -4,7 +4,8 @@ package log
 
 import "strconv"
 
-/// Log severity levels (standard)
+/// Log severity levels (RFC 5424 syslog standard + TRACE)
+/// Using uint8 for optimal memory usage and cache efficiency
 type LogLevel byte
 
 const (

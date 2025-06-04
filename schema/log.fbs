@@ -1,10 +1,14 @@
 // schema/log.fbs
-// Purpose: Log format are used as a optimised custom syslog protocol
+// Purpose: Log format used as an optimized custom syslog protocol
+// Designed for high-throughput log ingestion with minimal overhead
+// Field IDs ensure schema evolution compatibility without breaking changes
+
 include "common.fbs";
 
 namespace schema.log;
 
-/// Log severity levels (standard)
+/// Log severity levels (RFC 5424 syslog standard + TRACE)
+/// Using uint8 for optimal memory usage and cache efficiency
 enum LogLevel:uint8 {
     EMERGENCY = 0,    // System is unusable
     ALERT = 1,        // Action must be taken immediately
@@ -18,25 +22,29 @@ enum LogLevel:uint8 {
 }
 
 /// Log-specific event types
-enum LogEventType:uint32 {
+/// Optimized to uint8 since we only have a few types (was uint32)
+/// Used for routing and processing pipeline decisions
+enum LogEventType:uint8 {
     UNKNOWN = 0,     // Default/unspecified log type
-    COLLECT = 1,     // Standard log collection
-    ENRICH = 2,      // Log enrichment/annotation
-    AUTH = 3         // Experimenetal Authentication/authorization events
+    LOG = 1,         // Standard log collection (renamed from COLLECT for clarity)
+    ENRICH = 2       // Log enrichment/annotation
 }
 
 /// Single log entry in the system
+/// Field IDs allow optimal memory layout and schema evolution
+/// Ordered for cache efficiency: larger fields first, smaller fields grouped
 table LogEntry {
-    event_type:LogEventType;         // Log event type - primary field for routing
-    context_id:uint64;               // Session/transaction ID for correlation and filtering
-    level:LogLevel;                  // Severity level
-    timestamp:uint64;                // Source-generated timestamp (milliseconds since epoch)
-    source:string;                   // Source hostname/instance
-    service:string;                  // Service/application name
-    payload:[ubyte];                 // Structured data as bytes
+    context_id:uint64 (id: 0);          // Session/transaction ID for correlation and filtering
+    timestamp:uint64 (id: 1);           // Source-generated timestamp (milliseconds since epoch)
+    source:string (id: 2);              // Source hostname/instance
+    service:string (id: 3);             // Service/application name
+    payload:[ubyte] (id: 4);            // Structured data as bytes
+    event_type:LogEventType (id: 5);    // Log event type - primary field for routing
+    level:LogLevel (id: 6);             // Severity level
 }
 
-/// Log data container (goes in UnifiedBatch.data)
+/// Log data container (goes in Batch.data)
+/// Contains batched log entries for efficient network transport
 table LogData {
     logs:[LogEntry] (required);
 }

@@ -6,7 +6,8 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
-/// Event data container (goes in UnifiedBatch.data)
+/// Event data container (goes in Batch.data)
+/// Contains batched events for efficient network transport
 type EventData struct {
 	_tab flatbuffers.Table
 }

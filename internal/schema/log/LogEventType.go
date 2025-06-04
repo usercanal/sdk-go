@@ -5,27 +5,26 @@ package log
 import "strconv"
 
 /// Log-specific event types
-type LogEventType uint32
+/// Optimized to uint8 since we only have a few types (was uint32)
+/// Used for routing and processing pipeline decisions
+type LogEventType byte
 
 const (
 	LogEventTypeUNKNOWN LogEventType = 0
-	LogEventTypeCOLLECT LogEventType = 1
+	LogEventTypeLOG     LogEventType = 1
 	LogEventTypeENRICH  LogEventType = 2
-	LogEventTypeAUTH    LogEventType = 3
 )
 
 var EnumNamesLogEventType = map[LogEventType]string{
 	LogEventTypeUNKNOWN: "UNKNOWN",
-	LogEventTypeCOLLECT: "COLLECT",
+	LogEventTypeLOG:     "LOG",
 	LogEventTypeENRICH:  "ENRICH",
-	LogEventTypeAUTH:    "AUTH",
 }
 
 var EnumValuesLogEventType = map[string]LogEventType{
 	"UNKNOWN": LogEventTypeUNKNOWN,
-	"COLLECT": LogEventTypeCOLLECT,
+	"LOG":     LogEventTypeLOG,
 	"ENRICH":  LogEventTypeENRICH,
-	"AUTH":    LogEventTypeAUTH,
 }
 
 func (v LogEventType) String() string {

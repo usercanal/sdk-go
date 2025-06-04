@@ -1,30 +1,37 @@
 // schema/event.fbs
-// Purpose: Events are used for cdp/product analytics
+// Purpose: Events are used for CDP/product analytics tracking
+// Optimized for high-volume event ingestion with flexible payload structure
+// Field IDs ensure schema evolution compatibility
+
 include "common.fbs";
 
 namespace schema.event;
 
 /// Event types for different processing paths
-enum EventType:uint32 {
-    UNKNOWN = 0,                        // Add default value at 0
-    TRACK = 1,                          // User action tracking
-    IDENTIFY = 2,                       // User identification/traits
-    GROUP = 3,                          // Group membership/traits
-    ALIAS = 4,                          // Identity resolution
-    ENRICH = 5                          // Generic entity enrichment
+/// Optimized to uint8 for memory efficiency (was uint32)
+/// Determines downstream processing and storage routing
+enum EventType:uint8 {
+    UNKNOWN = 0,     // Default value required by FlatBuffers
+    TRACK = 1,       // User action tracking (page views, clicks, etc.)
+    IDENTIFY = 2,    // User identification/traits updates
+    GROUP = 3,       // Group membership/traits updates
+    ALIAS = 4,       // Identity resolution/user merging
+    ENRICH = 5       // Generic entity enrichment
 }
 
-// Single event in the CDP system
-//   session_id (context_id) and message_id (tracing, sorting) can be added in payload.
-//   we will test adding this through the SDKs instead.
+/// Single event in the CDP system
+/// Field IDs allow optimal memory layout and forward compatibility
+/// Note: session_id (context_id) and message_id can be included in payload
+/// if needed - testing through SDKs to determine if top-level fields are required
 table Event {
-    timestamp:uint64;                   // Unix timestamp in milliseconds
-    event_type:EventType;               // Determines how payload is processed
-    user_id:[ubyte] (required);         // Fixed 16-byte UUID
-    payload:[ubyte] (required);         // Event data (as bytes for flexibility)
+    timestamp:uint64 (id: 0);           // Unix timestamp in milliseconds
+    user_id:[ubyte] (id: 1);            // Fixed 16-byte UUID for user identification
+    payload:[ubyte] (id: 2);            // Event data (as bytes for maximum flexibility)
+    event_type:EventType (id: 3);       // Determines how payload is processed
 }
 
-/// Event data container (goes in UnifiedBatch.data)
+/// Event data container (goes in Batch.data)
+/// Contains batched events for efficient network transport
 table EventData {
     events:[Event] (required);
 }

@@ -5,7 +5,9 @@ package event
 import "strconv"
 
 /// Event types for different processing paths
-type EventType uint32
+/// Optimized to uint8 for memory efficiency (was uint32)
+/// Determines downstream processing and storage routing
+type EventType byte
 
 const (
 	EventTypeUNKNOWN  EventType = 0

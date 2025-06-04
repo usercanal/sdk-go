@@ -26,8 +26,12 @@ Usercanal is a unified, high-performance SDK for **analytics events** and **stru
 - **Smart batching**: Automatic batching with configurable size and intervals for optimal performance
 - **Built-in authentication**: API key-based auth in every batch header for enterprise security
 - **Batch tracing**: Unique batch IDs for tracking data delivery and debugging lost data
-- **Built-in high availability**: DNS failover, smart reconnection, zero data loss guarantees
+- **Built-in high availability**: DNS failover, smart reconnection, backoff, zero data loss guarantees
 - **Unified transport**: Events and logs share the same optimized TCP pipeline
+- **Workspace isolation**: Multi-tenant architecture with API key-based workspace routing
+- **Real-time processing**: Sub-millisecond event processing with immediate routing
+- **Schema validation**: Type-safe binary schemas prevent data corruption at the protocol level
+- **Production monitoring**: Built-in metrics and health checking for observability
 
 ### Event Analytics Features
 - **User behavior tracking**: Product analytics with funnel and cohort support
@@ -179,7 +183,12 @@ client, _ := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
 })
 ```
 
-## Explore More
+## Documentation
+
+### SDK Documentation
+- [📋 Features Overview](FEATURES.md) - Complete feature list and capabilities
+
+### External Resources
 - [📚 Full Documentation](https://docs.usercanal.com/docs/SDKs/go) - Dive deeper into the SDK capabilities.
 - [📊 Dashboard](https://app.usercanal.com) - Manage your analytics in real-time. (coming)
 - [🚀 Collector](https://github.com/usercanal/cdp-collector) - Self-hosted data pipeline

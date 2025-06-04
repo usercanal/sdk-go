@@ -7,6 +7,8 @@ import (
 )
 
 /// Single log entry in the system
+/// Field IDs allow optimal memory layout and schema evolution
+/// Ordered for cache efficiency: larger fields first, smaller fields grouped
 type LogEntry struct {
 	_tab flatbuffers.Table
 }
@@ -42,20 +44,8 @@ func (rcv *LogEntry) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *LogEntry) EventType() LogEventType {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
-	if o != 0 {
-		return LogEventType(rcv._tab.GetUint32(o + rcv._tab.Pos))
-	}
-	return 0
-}
-
-func (rcv *LogEntry) MutateEventType(n LogEventType) bool {
-	return rcv._tab.MutateUint32Slot(4, uint32(n))
-}
-
 func (rcv *LogEntry) ContextId() uint64 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
 		return rcv._tab.GetUint64(o + rcv._tab.Pos)
 	}
@@ -63,23 +53,11 @@ func (rcv *LogEntry) ContextId() uint64 {
 }
 
 func (rcv *LogEntry) MutateContextId(n uint64) bool {
-	return rcv._tab.MutateUint64Slot(6, n)
-}
-
-func (rcv *LogEntry) Level() LogLevel {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
-	if o != 0 {
-		return LogLevel(rcv._tab.GetByte(o + rcv._tab.Pos))
-	}
-	return 0
-}
-
-func (rcv *LogEntry) MutateLevel(n LogLevel) bool {
-	return rcv._tab.MutateByteSlot(8, byte(n))
+	return rcv._tab.MutateUint64Slot(4, n)
 }
 
 func (rcv *LogEntry) Timestamp() uint64 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.GetUint64(o + rcv._tab.Pos)
 	}
@@ -87,11 +65,11 @@ func (rcv *LogEntry) Timestamp() uint64 {
 }
 
 func (rcv *LogEntry) MutateTimestamp(n uint64) bool {
-	return rcv._tab.MutateUint64Slot(10, n)
+	return rcv._tab.MutateUint64Slot(6, n)
 }
 
 func (rcv *LogEntry) Source() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -99,7 +77,7 @@ func (rcv *LogEntry) Source() []byte {
 }
 
 func (rcv *LogEntry) Service() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -107,7 +85,7 @@ func (rcv *LogEntry) Service() []byte {
 }
 
 func (rcv *LogEntry) Payload(j int) byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -116,7 +94,7 @@ func (rcv *LogEntry) Payload(j int) byte {
 }
 
 func (rcv *LogEntry) PayloadLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -124,7 +102,7 @@ func (rcv *LogEntry) PayloadLength() int {
 }
 
 func (rcv *LogEntry) PayloadBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -132,7 +110,7 @@ func (rcv *LogEntry) PayloadBytes() []byte {
 }
 
 func (rcv *LogEntry) MutatePayload(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -140,32 +118,56 @@ func (rcv *LogEntry) MutatePayload(j int, n byte) bool {
 	return false
 }
 
+func (rcv *LogEntry) EventType() LogEventType {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
+	if o != 0 {
+		return LogEventType(rcv._tab.GetByte(o + rcv._tab.Pos))
+	}
+	return 0
+}
+
+func (rcv *LogEntry) MutateEventType(n LogEventType) bool {
+	return rcv._tab.MutateByteSlot(14, byte(n))
+}
+
+func (rcv *LogEntry) Level() LogLevel {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		return LogLevel(rcv._tab.GetByte(o + rcv._tab.Pos))
+	}
+	return 0
+}
+
+func (rcv *LogEntry) MutateLevel(n LogLevel) bool {
+	return rcv._tab.MutateByteSlot(16, byte(n))
+}
+
 func LogEntryStart(builder *flatbuffers.Builder) {
 	builder.StartObject(7)
 }
-func LogEntryAddEventType(builder *flatbuffers.Builder, eventType LogEventType) {
-	builder.PrependUint32Slot(0, uint32(eventType), 0)
-}
 func LogEntryAddContextId(builder *flatbuffers.Builder, contextId uint64) {
-	builder.PrependUint64Slot(1, contextId, 0)
-}
-func LogEntryAddLevel(builder *flatbuffers.Builder, level LogLevel) {
-	builder.PrependByteSlot(2, byte(level), 0)
+	builder.PrependUint64Slot(0, contextId, 0)
 }
 func LogEntryAddTimestamp(builder *flatbuffers.Builder, timestamp uint64) {
-	builder.PrependUint64Slot(3, timestamp, 0)
+	builder.PrependUint64Slot(1, timestamp, 0)
 }
 func LogEntryAddSource(builder *flatbuffers.Builder, source flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(source), 0)
+	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(source), 0)
 }
 func LogEntryAddService(builder *flatbuffers.Builder, service flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(5, flatbuffers.UOffsetT(service), 0)
+	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(service), 0)
 }
 func LogEntryAddPayload(builder *flatbuffers.Builder, payload flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(6, flatbuffers.UOffsetT(payload), 0)
+	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(payload), 0)
 }
 func LogEntryStartPayloadVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)
+}
+func LogEntryAddEventType(builder *flatbuffers.Builder, eventType LogEventType) {
+	builder.PrependByteSlot(5, byte(eventType), 0)
+}
+func LogEntryAddLevel(builder *flatbuffers.Builder, level LogLevel) {
+	builder.PrependByteSlot(6, byte(level), 0)
 }
 func LogEntryEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

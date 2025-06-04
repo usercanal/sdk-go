@@ -6,6 +6,10 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
+/// Single event in the CDP system
+/// Field IDs allow optimal memory layout and forward compatibility
+/// Note: session_id (context_id) and message_id can be included in payload
+/// if needed - testing through SDKs to determine if top-level fields are required
 type Event struct {
 	_tab flatbuffers.Table
 }
@@ -53,20 +57,8 @@ func (rcv *Event) MutateTimestamp(n uint64) bool {
 	return rcv._tab.MutateUint64Slot(4, n)
 }
 
-func (rcv *Event) EventType() EventType {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
-	if o != 0 {
-		return EventType(rcv._tab.GetUint32(o + rcv._tab.Pos))
-	}
-	return 0
-}
-
-func (rcv *Event) MutateEventType(n EventType) bool {
-	return rcv._tab.MutateUint32Slot(6, uint32(n))
-}
-
 func (rcv *Event) UserId(j int) byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -75,7 +67,7 @@ func (rcv *Event) UserId(j int) byte {
 }
 
 func (rcv *Event) UserIdLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -83,7 +75,7 @@ func (rcv *Event) UserIdLength() int {
 }
 
 func (rcv *Event) UserIdBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -91,7 +83,7 @@ func (rcv *Event) UserIdBytes() []byte {
 }
 
 func (rcv *Event) MutateUserId(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -100,7 +92,7 @@ func (rcv *Event) MutateUserId(j int, n byte) bool {
 }
 
 func (rcv *Event) Payload(j int) byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -109,7 +101,7 @@ func (rcv *Event) Payload(j int) byte {
 }
 
 func (rcv *Event) PayloadLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -117,7 +109,7 @@ func (rcv *Event) PayloadLength() int {
 }
 
 func (rcv *Event) PayloadBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -125,12 +117,24 @@ func (rcv *Event) PayloadBytes() []byte {
 }
 
 func (rcv *Event) MutatePayload(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
 	}
 	return false
+}
+
+func (rcv *Event) EventType() EventType {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	if o != 0 {
+		return EventType(rcv._tab.GetByte(o + rcv._tab.Pos))
+	}
+	return 0
+}
+
+func (rcv *Event) MutateEventType(n EventType) bool {
+	return rcv._tab.MutateByteSlot(10, byte(n))
 }
 
 func EventStart(builder *flatbuffers.Builder) {
@@ -139,20 +143,20 @@ func EventStart(builder *flatbuffers.Builder) {
 func EventAddTimestamp(builder *flatbuffers.Builder, timestamp uint64) {
 	builder.PrependUint64Slot(0, timestamp, 0)
 }
-func EventAddEventType(builder *flatbuffers.Builder, eventType EventType) {
-	builder.PrependUint32Slot(1, uint32(eventType), 0)
-}
 func EventAddUserId(builder *flatbuffers.Builder, userId flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(userId), 0)
+	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(userId), 0)
 }
 func EventStartUserIdVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)
 }
 func EventAddPayload(builder *flatbuffers.Builder, payload flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(payload), 0)
+	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(payload), 0)
 }
 func EventStartPayloadVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)
+}
+func EventAddEventType(builder *flatbuffers.Builder, eventType EventType) {
+	builder.PrependByteSlot(3, byte(eventType), 0)
 }
 func EventEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
