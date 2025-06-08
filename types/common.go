@@ -14,6 +14,33 @@ var (
 	ErrNotConnected   = fmt.Errorf("not connected")
 )
 
+// Error constructors for consistent error handling patterns
+
+// NewNetworkError creates a standardized network error
+func NewNetworkError(operation, message string) error {
+	return &NetworkError{
+		Operation: operation,
+		Message:   message,
+		Retries:   0,
+	}
+}
+
+// NewTimeoutError creates a standardized timeout error
+func NewTimeoutError(operation, duration string) error {
+	return &TimeoutError{
+		Operation: operation,
+		Duration:  duration,
+	}
+}
+
+// WrapError wraps an error with context for consistent error chains
+func WrapError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", operation, err)
+}
+
 // ValidationError represents a validation error
 type ValidationError struct {
 	Field   string

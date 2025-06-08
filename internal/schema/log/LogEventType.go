@@ -4,9 +4,7 @@ package log
 
 import "strconv"
 
-/// Log-specific event types
-/// Optimized to uint8 since we only have a few types (was uint32)
-/// Used for routing and processing pipeline decisions
+/// Log-specific event types (optimized to uint8)
 type LogEventType byte
 
 const (

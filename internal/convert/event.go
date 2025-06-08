@@ -13,7 +13,7 @@ import (
 // Map SDK event names to FlatBuffer event types
 var eventTypeMap = map[types.EventName]event_collector.EventType{
 	types.UserSignedUp:         event_collector.EventTypeTRACK,
-	types.UserLoggedIn:         event_collector.EventTypeTRACK,
+	types.UserSignedIn:         event_collector.EventTypeTRACK,
 	types.FeatureUsed:          event_collector.EventTypeTRACK,
 	types.OrderCompleted:       event_collector.EventTypeTRACK,
 	types.SubscriptionStarted:  event_collector.EventTypeTRACK,

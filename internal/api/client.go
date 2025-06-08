@@ -8,17 +8,19 @@ import (
 	"time"
 
 	"github.com/usercanal/sdk-go/internal/batch"
+	configDefaults "github.com/usercanal/sdk-go/internal/config"
 	"github.com/usercanal/sdk-go/internal/logger"
 	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
 )
 
+// Use centralized defaults from config package
 const (
-	defaultEndpoint      = "collect.usercanal.com:9000"
-	defaultBatchSize     = 100
-	defaultFlushInterval = 10 * time.Second
-	defaultMaxRetries    = 3
-	defaultCloseTimeout  = 5 * time.Second
+	defaultEndpoint      = configDefaults.DefaultEndpoint
+	defaultBatchSize     = configDefaults.DefaultBatchSize
+	defaultFlushInterval = configDefaults.DefaultFlushInterval
+	defaultMaxRetries    = configDefaults.DefaultMaxRetries
+	defaultCloseTimeout  = configDefaults.DefaultCloseTimeout
 )
 
 // Client represents an analytics client
@@ -56,7 +58,7 @@ func defaultConfig() *config {
 		batchSize:     defaultBatchSize,
 		flushInterval: defaultFlushInterval,
 		maxRetries:    defaultMaxRetries,
-		debug:         false,
+		debug:         configDefaults.DefaultDebug,
 	}
 }
 
@@ -210,7 +212,7 @@ func (c *Client) checkClosed() error {
 }
 
 // Close flushes pending data and closes the client
-func (c *Client) Close() error {
+func (c *Client) Close(ctx context.Context) error {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -225,18 +227,36 @@ func (c *Client) Close() error {
 	c.closing = true
 	c.mu.Unlock()
 
-	// Try to flush with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), defaultCloseTimeout)
-	defer cancel()
+	// Use provided context or create timeout context
+	var cancel context.CancelFunc
+	if ctx == nil {
+		ctx, cancel = context.WithTimeout(context.Background(), defaultCloseTimeout)
+		defer cancel()
+	}
 
 	var flushErr error
 	if err := c.Flush(ctx); err != nil {
 		flushErr = fmt.Errorf("failed to flush data during shutdown: %w", err)
 	}
 
+	// Close batchers
+	if err := c.eventBatcher.Close(); err != nil {
+		if flushErr == nil {
+			flushErr = fmt.Errorf("failed to close event batcher: %w", err)
+		}
+	}
+
+	if err := c.logBatcher.Close(); err != nil {
+		if flushErr == nil {
+			flushErr = fmt.Errorf("failed to close log batcher: %w", err)
+		}
+	}
+
 	// Close the sender
 	if err := c.sender.Close(); err != nil {
-		return fmt.Errorf("failed to close sender: %w", err)
+		if flushErr == nil {
+			flushErr = fmt.Errorf("failed to close sender: %w", err)
+		}
 	}
 
 	// Now mark as fully closed

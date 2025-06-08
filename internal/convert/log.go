@@ -3,10 +3,18 @@ package convert
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
+	"time"
 
 	schema_log "github.com/usercanal/sdk-go/internal/schema/log"
 	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
+)
+
+var (
+	randSource = rand.New(rand.NewSource(time.Now().UnixNano()))
+	randMutex  sync.Mutex
 )
 
 // Map SDK log levels to FlatBuffer log levels
@@ -25,9 +33,15 @@ var logLevelMap = map[types.LogLevel]schema_log.LogLevel{
 // Map SDK log event types to FlatBuffer log event types
 var logEventTypeMap = map[types.LogEventType]schema_log.LogEventType{
 	types.LogUnknown: schema_log.LogEventTypeUNKNOWN,
-	types.LogCollect: schema_log.LogEventTypeCOLLECT,
+	types.LogCollect: schema_log.LogEventTypeLOG,
 	types.LogEnrich:  schema_log.LogEventTypeENRICH,
-	types.LogAuth:    schema_log.LogEventTypeAUTH,
+}
+
+// generateContextID creates a simple context ID when not provided
+func generateContextID() uint64 {
+	randMutex.Lock()
+	defer randMutex.Unlock()
+	return randSource.Uint64()
 }
 
 // LogToInternal converts a types.LogEntry to an internal transport.LogEntry
@@ -52,6 +66,12 @@ func LogToInternal(l *types.LogEntry) (*transport.Log, error) {
 		return nil, fmt.Errorf("invalid log event type: %d", l.EventType)
 	}
 
+	// Generate context ID if not provided
+	contextID := l.ContextID
+	if contextID == 0 {
+		contextID = generateContextID()
+	}
+
 	// Prepare payload - combine message and data
 	payload := make(map[string]interface{})
 	if l.Message != "" {
@@ -70,7 +90,7 @@ func LogToInternal(l *types.LogEntry) (*transport.Log, error) {
 
 	return &transport.Log{
 		EventType: fbEventType,
-		ContextID: l.ContextID,
+		ContextID: contextID,
 		Level:     fbLogLevel,
 		Timestamp: resolveTimestamp(l.Timestamp),
 		Source:    l.Source,

@@ -20,19 +20,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(context.Background()); err != nil {
+			log.Printf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
 	// Super simple logging
-	client.LogInfo(ctx, "my-app", "main.go", "Application started", nil)
+	client.LogInfo(ctx, "my-app", "Application started", nil)
 
-	client.LogError(ctx, "my-app", "main.go", "Login failed", map[string]interface{}{
+	client.LogError(ctx, "my-app", "Login failed", map[string]interface{}{
 		"user_id": "123",
 		"reason":  "invalid_password",
 	})
 
-	client.LogDebug(ctx, "my-app", "main.go", "Processing request", map[string]interface{}{
+	client.LogDebug(ctx, "my-app", "Processing request", map[string]interface{}{
 		"request_id": "req_456",
 		"duration":   "45ms",
 	})

@@ -99,7 +99,7 @@ func (l *LogEntry) Validate() error {
 	if l.Level > LogTrace {
 		return NewValidationError("Level", "invalid log level")
 	}
-	if l.EventType > LogAuth {
+	if l.EventType > LogEnrich {
 		return NewValidationError("EventType", "invalid log event type")
 	}
 	if l.Service == "" {

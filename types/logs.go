@@ -24,8 +24,45 @@ const (
 	LogUnknown LogEventType = 0
 	LogCollect LogEventType = 1
 	LogEnrich  LogEventType = 2
-	LogAuth    LogEventType = 3
 )
+
+// String returns the string representation of LogLevel
+func (l LogLevel) String() string {
+	switch l {
+	case LogEmergency:
+		return "emergency"
+	case LogAlert:
+		return "alert"
+	case LogCritical:
+		return "critical"
+	case LogError:
+		return "error"
+	case LogWarning:
+		return "warning"
+	case LogNotice:
+		return "notice"
+	case LogInfo:
+		return "info"
+	case LogDebug:
+		return "debug"
+	case LogTrace:
+		return "trace"
+	default:
+		return "unknown"
+	}
+}
+
+// String returns the string representation of LogEventType
+func (t LogEventType) String() string {
+	switch t {
+	case LogCollect:
+		return "collect"
+	case LogEnrich:
+		return "enrich"
+	default:
+		return "unknown"
+	}
+}
 
 // LogEntry represents a log entry in the system
 type LogEntry struct {

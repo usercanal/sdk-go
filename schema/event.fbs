@@ -25,9 +25,9 @@ enum EventType:uint8 {
 /// if needed - testing through SDKs to determine if top-level fields are required
 table Event {
     timestamp:uint64 (id: 0);           // Unix timestamp in milliseconds
-    user_id:[ubyte] (id: 1);            // Fixed 16-byte UUID for user identification
-    payload:[ubyte] (id: 2);            // Event data (as bytes for maximum flexibility)
-    event_type:EventType (id: 3);       // Determines how payload is processed
+    event_type:EventType (id: 1);       // Processing path selector
+    user_id:[ubyte] (id: 2);            // Fixed 16-byte UUID
+    payload:[ubyte] (id: 3);            // Event data as bytes
 }
 
 /// Event data container (goes in Batch.data)

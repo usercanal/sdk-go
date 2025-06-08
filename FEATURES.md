@@ -1,148 +1,88 @@
-# Usercanal SDK Features
+# SDK Features Overview
 
-## Core Architecture Features
+## Core Differentiators
 
-### Unified Protocol Support
-- **Dual protocol handling**: Analytics events and structured logging in a single SDK
-- **Shared transport layer**: Both protocols use the same optimized TCP connection
-- **Independent batching**: Separate batchers prevent cross-protocol blocking
-- **Unified configuration**: Single config applies to both events and logs
+### Unified Protocol
+- **Single SDK** for both analytics events and structured logging
+- **Shared transport** - events and logs use the same optimized connection
+- **Independent batching** - separate queues prevent blocking between protocols
 
-### High-Performance Protocol
-- **Binary FlatBuffers**: Zero-copy serialization for maximum throughput (20M+ events/second)
-- **Smart batching**: Configurable size (default: 100 items) and time-based (default: 10s) batching
-- **Connection pooling**: Single persistent TCP connection with keepalive
-- **Schema validation**: Type-safe binary schemas prevent data corruption
+### High-Performance Binary Protocol
+- **FlatBuffers format** - zero-copy serialization vs JSON/text parsing
+- **Batch processing** - configurable batching (size + time-based)
+- **20M+ events/second** throughput capability
+- **TCP connection pooling** with automatic reconnection
 
-### Enterprise-Grade Reliability
-- **Built-in authentication**: API key embedded in every batch header
-- **Batch tracing**: Unique batch IDs for delivery tracking and debugging
-- **Zero data loss**: Automatic retry with exponential backoff
-- **DNS failover**: Multiple endpoint support for high availability
-- **Graceful degradation**: Continues operation during network issues
+### Enterprise Features
+- **API key authentication** embedded in every batch
+- **Batch tracking** with unique IDs for delivery verification
+- **Zero data loss** with automatic retry and exponential backoff
+- **Multi-tenant workspace** isolation
 
-## Event Analytics Features
+## Event Analytics
 
-### User Behavior Tracking
-- **Standard event types**: Pre-defined constants for common user actions
-- **Custom events**: Support for application-specific event tracking
-- **User identification**: Associate events with user identities
-- **Group analytics**: Track organizational and cohort behavior
-- **Session tracking**: Correlate events within user sessions
+### Business Intelligence
+- **Revenue tracking** - subscriptions, one-time payments, multi-currency
+- **User behavior** - funnels, cohorts, feature usage
+- **Type-safe constants** - 44+ predefined events (signup, purchase, etc.)
+- **Custom events** - full string flexibility for domain-specific tracking
 
-### Revenue Analytics
-- **Multiple revenue types**: Subscription and one-time payment tracking
-- **Multi-currency support**: USD, EUR, GBP with extensible currency system
-- **Product tracking**: Detailed product information in revenue events
-- **Order management**: Complete transaction lifecycle tracking
-- **Conversion funnels**: Track user progression through purchase flows
+### User Management
+- **Identity tracking** - associate events with users
+- **Group analytics** - organizational/team behavior
+- **Session correlation** - track user journeys
 
-### Type Safety
-- **Strongly typed events**: EventName enum prevents typos
-- **Validated properties**: Type-safe property maps with validation
-- **Currency constraints**: Enum-based currency codes
-- **Revenue validation**: Amount and currency validation
+## Structured Logging
 
-## Advanced Logging Features
+### vs Traditional Logging
+| Feature | UserCanal | Syslog/JSON |
+|---------|-----------|-------------|
+| Format | Binary (efficient) | Text (overhead) |
+| Batching | ✅ Built-in | ❌ Message-by-message |
+| Authentication | ✅ Per-batch | ❌ Network-only |
+| Context IDs | ✅ Distributed tracing | ❌ No correlation |
+| Delivery tracking | ✅ Batch IDs | ❌ Fire-and-forget |
 
-### Structured Logging
-- **Binary format**: Optimized binary logging vs traditional text-based syslog
-- **Structured data**: Rich property maps with mixed data types
-- **Multiple severity levels**: Standard syslog levels (0-8) from EMERGENCY to TRACE
-- **Service isolation**: Clear service and source identification
-- **Context correlation**: Distributed tracing via context IDs
+### Advanced Capabilities
+- **Context correlation** - distributed tracing across microservices
+- **Service isolation** - clear service/source identification
+- **9 severity levels** - EMERGENCY to TRACE
+- **Real-time processing** - sub-millisecond routing
 
-### High-Throughput Processing
-- **Batch processing**: Log batching not available in traditional syslog
-- **Non-blocking I/O**: Asynchronous log delivery
-- **Bulk operations**: LogBatch() for high-volume scenarios
-- **Memory efficient**: Streaming batch processing
+## Developer Experience
 
-### Enterprise Integration
-- **Workspace routing**: Multi-tenant isolation via API keys
-- **Real-time processing**: Sub-millisecond routing and processing
-- **Event type routing**: Configurable log routing (collect/enrich/auth)
-- **Metadata enhancement**: Pipeline for log enrichment
+### Simple API
+```go
+// Analytics
+client.Event(ctx, userID, eventName, properties)
+client.EventRevenue(ctx, userID, orderID, amount, currency, properties)
 
-## Transport Layer Features
+// Logging (hostname auto-set)
+client.LogInfo(ctx, service, message, data)
+client.LogError(ctx, service, message, data)
+```
 
-### Network Reliability
-- **Connection management**: Automatic reconnection with exponential backoff
-- **Health monitoring**: Continuous connection health checks
-- **Timeout handling**: Configurable timeouts with context cancellation
-- **Error recovery**: Automatic retry for transient failures
-- **Resource cleanup**: Proper connection and resource disposal
+### Built-in Reliability
+- **Smart reconnection** with DNS failover
+- **Graceful degradation** during network issues
+- **Thread-safe** concurrent access
+- **Context-aware shutdown** with proper cleanup
 
-### Performance Optimization
-- **TCP optimization**: Single persistent connection with keepalive
-- **Message framing**: Efficient length-prefixed message protocol
-- **Zero-copy processing**: FlatBuffers eliminate serialization overhead
-- **Batch efficiency**: Optimal network utilization through batching
-- **Memory management**: Bounded memory usage with configurable limits
+### Observability
+- **Built-in metrics** - queue depth, throughput, error rates
+- **Health monitoring** - connection status, delivery tracking
+- **Debug support** - configurable verbose logging
 
-### Security
-- **TLS support**: Production-grade encryption for data in transit
-- **API key authentication**: Secure workspace isolation
-- **Schema validation**: Prevent malformed data injection
-- **Input sanitization**: Comprehensive validation and bounds checking
+## Performance Characteristics
 
-## Observability Features
+### Resource Efficiency
+- **Minimal CPU** overhead from zero-copy processing
+- **Bounded memory** usage with configurable limits
+- **Single connection** reduces network overhead
+- **Async processing** prevents blocking application threads
 
-### Built-in Metrics
-- **Throughput tracking**: Events and logs sent per second
-- **Queue monitoring**: Real-time queue depth and processing stats
-- **Success/failure rates**: Detailed delivery statistics
-- **Timing metrics**: Batch flush intervals and network latency
-- **Resource usage**: Memory footprint and connection status
-
-### Health Monitoring
-- **Connection status**: TCP connection health indicators
-- **Batch delivery**: Recent success/failure tracking
-- **Error categorization**: Validation, network, and timeout error tracking
-- **Performance indicators**: Latency and throughput measurements
-
-### Debug Support
-- **Verbose logging**: Configurable debug output
-- **Batch tracing**: Track individual batch delivery
-- **Error details**: Comprehensive error messages with context
-- **Status dumping**: Runtime state inspection for troubleshooting
-
-## Configuration Features
-
-### Flexible Configuration
-- **Environment-specific**: Different configs for dev/staging/production
-- **Runtime adjustment**: Hot configuration updates where applicable
-- **Validation**: Configuration validation with sensible defaults
-- **Option patterns**: Clean, composable configuration API
-
-### Performance Tuning
-- **Batch size tuning**: Optimize for throughput vs latency
-- **Flush interval adjustment**: Balance real-time vs efficiency
-- **Retry configuration**: Customize retry behavior for different environments
-- **Connection tuning**: Timeout and keepalive customization
-
-### Development Support
-- **Local development**: Easy local collector configuration
-- **Debug mode**: Enhanced logging for development
-- **Test mode**: Special configuration for testing scenarios
-- **Mock support**: Interface design enables easy mocking
-
-## Quality Assurance Features
-
-### Thread Safety
-- **Concurrent access**: Thread-safe public API
-- **Background processing**: Safe concurrent batch processing
-- **Resource synchronization**: Proper locking around shared resources
-- **Graceful shutdown**: Coordinated cleanup across all threads
-
-### Error Handling
-- **Comprehensive errors**: Detailed error types for different failure modes
-- **Error propagation**: Clean error handling through the call stack
-- **Recovery mechanisms**: Automatic recovery from transient failures
-- **User feedback**: Clear error messages for debugging
-
-### Testing Support
-- **Interface design**: Clean interfaces enable comprehensive testing
-- **Dependency injection**: Configurable dependencies for testing
-- **Mock-friendly**: Easy to mock for unit testing
-- **Integration testing**: Support for end-to-end testing scenarios
+### Scalability
+- **Horizontal scaling** through workspace isolation
+- **High throughput** optimized for enterprise workloads
+- **Real-time processing** with immediate routing
+- **Configurable batching** to balance latency vs efficiency

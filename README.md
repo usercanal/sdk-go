@@ -15,8 +15,8 @@ Usercanal is a unified, high-performance SDK for **analytics events** and **stru
 | SDK | Events | Logs |
 |-----|---------|---------|
 | [Go SDK](https://github.com/usercanal/sdk-go) | ✅ | ✅ |
-| [TypeScript SDK](https://github.com/usercanal/sdk-ts) | ✅ | ⏳ |
-| [Swift SDK](https://github.com/usercanal/sdk-swift) | ✅ | ⏳ |
+| [TypeScript SDK](https://github.com/usercanal/sdk-ts) | ⏳ | ⏳ |
+| [Swift SDK](https://github.com/usercanal/sdk-swift) | ⏳ | ⏳ |
 
 ## Key Features
 
@@ -60,7 +60,6 @@ go get github.com/usercanal/sdk-go
 
 Perfect for tracking user behavior, feature usage, and business metrics:
 
-
 ```go
 import (
     "context"
@@ -68,28 +67,27 @@ import (
 )
 
 func main() {
-    // Initialize the Usercanal client
-    client := usercanal.NewClient("YOUR_API_KEY")
-    defer client.Close()
+    // Initialize the client
+    client, _ := usercanal.NewClient("YOUR_API_KEY")
+    defer client.Close(context.Background())
 
     ctx := context.Background()
 
-    // Track user events
-    client.Track(ctx, usercanal.Event{
-        UserId: "user_123",
-        Name:   usercanal.FeatureUsed,
-        Properties: usercanal.Properties{
-            "feature_name": "export",
-            "duration_ms": 1500,
-        },
+    // Track user events - simplified API
+    client.Event(ctx, "user_123", usercanal.FeatureUsed, usercanal.Properties{
+        "feature_name": "export",
+        "duration_ms":  1500,
     })
 
-    // Track revenue
-    client.Revenue(ctx, usercanal.Revenue{
-        UserId:     "user_123",
-        Amount:     29.99,
-        Currency:   usercanal.CurrencyUSD,
-        Type:       usercanal.RevenueTypeSubscription,
+    // Track revenue - simplified parameters
+    client.EventRevenue(ctx, "user_123", "order_456", 29.99, usercanal.CurrencyUSD, usercanal.Properties{
+        "type": usercanal.RevenueTypeSubscription,
+    })
+
+    // Identify users
+    client.EventIdentify(ctx, "user_123", usercanal.Properties{
+        "name":  "John Doe",
+        "email": "john@example.com",
     })
 
     client.Flush(ctx) // Ensure delivery
@@ -108,17 +106,17 @@ import (
 
 func main() {
     client, _ := usercanal.NewClient("YOUR_API_KEY")
-    defer client.Close()
+    defer client.Close(context.Background())
 
     ctx := context.Background()
 
-    // Simple logging
-    client.LogInfo(ctx, "api-server", "auth.go", "User login successful", map[string]interface{}{
+    // Simple logging - hostname auto-set by SDK
+    client.LogInfo(ctx, "api-server", "User login successful", map[string]interface{}{
         "user_id": "123",
         "method":  "oauth",
     })
 
-    client.LogError(ctx, "api-server", "payment.go", "Payment failed", map[string]interface{}{
+    client.LogError(ctx, "payment-service", "Payment failed", map[string]interface{}{
         "user_id": "123",
         "amount":  99.99,
         "reason":  "insufficient_funds",
@@ -128,17 +126,19 @@ func main() {
 }
 ```
 
-## Advanced Configuration
-
-Both events and logs share the same high-performance configuration:
+## Configuration
 
 ```go
+// Simple - uses defaults
+client, _ := usercanal.NewClient("YOUR_API_KEY")
+
+// Advanced configuration
 client, _ := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
-    Endpoint:      "collect.usercanal.com:50000", // Production endpoint (use localhost:50000 for local)
-    BatchSize:     100,                      // Events/logs per batch
-    FlushInterval: 5 * time.Second,          // Max time between sends
-    MaxRetries:    3,                        // Retry attempts
-    Debug:         true,                     // Enable debug logging
+    Endpoint:      "collect.usercanal.com:50000", // Production endpoint
+    BatchSize:     100,                          // Events/logs per batch
+    FlushInterval: 5 * time.Second,              // Max time between sends
+    MaxRetries:    3,                            // Retry attempts
+    Debug:         true,                         // Enable debug logging
 })
 ```
 
@@ -154,14 +154,25 @@ client, _ := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
 | **Performance** | Zero-copy processing | Text parsing overhead |
 | **Batch Tracking** | ✅ Unique batch IDs | ❌ No delivery tracking |
 
-### Event Analytics vs Logs
-| Feature | Analytics Events | Structured Logs |
-|---------|------------------|-----------------|
-| **Purpose** | User behavior, business metrics | Application monitoring, debugging |
-| **Examples** | Sign ups, purchases, feature usage | Errors, info messages, debug traces |
-| **Storage** | Optimized for analytics queries | Optimized for time-series search |
-| **Retention** | Long-term (years) | Medium-term (months) |
-| **Querying** | Dashboards, funnels, cohorts | Log search, alerting, monitoring |
+## API Overview
+
+```go
+// Event Tracking
+client.Event(ctx, userID, eventName, properties)
+client.EventIdentify(ctx, userID, traits)
+client.EventGroup(ctx, userID, groupID, properties)
+client.EventRevenue(ctx, userID, orderID, amount, currency, properties)
+
+// Structured Logging (hostname auto-set)
+client.LogInfo(ctx, service, message, data)
+client.LogError(ctx, service, message, data)
+// + LogDebug, LogWarning, LogCritical, LogAlert, LogEmergency, LogNotice, LogTrace
+
+// Management
+client.Flush(ctx)        // Force send
+client.Close(ctx)        // Graceful shutdown
+client.GetStats()        // Connection & queue stats
+```
 
 ## Why Usercanal?
 
@@ -174,11 +185,11 @@ client, _ := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
 
 ## Local Development
 
-For testing against a local collector:
+For local development:
 
 ```go
 client, _ := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
-    Endpoint: "localhost:50000",  // Your local collector
+    Endpoint: "localhost:50000",
     Debug:    true,
 })
 ```

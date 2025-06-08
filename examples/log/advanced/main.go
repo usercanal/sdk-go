@@ -14,7 +14,7 @@ import (
 func main() {
 	// Initialize with configuration optimized for high-volume logging
 	client, err := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
-		Endpoint:      "collect.usercanal.com:9000",
+		Endpoint:      "collect.usercanal.com:50000",
 		BatchSize:     500, // Higher batch size for logs
 		FlushInterval: 2 * time.Second,
 		MaxRetries:    5,
@@ -23,14 +23,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(context.Background()); err != nil {
+			log.Printf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	hostname, _ := os.Hostname()
 	sessionID := uint64(time.Now().UnixNano()) // Simple session ID
 
 	// Application startup log
-	err = client.SendLog(ctx, usercanal.LogEntry{
+	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
 		ContextID: sessionID,
 		Level:     usercanal.LogInfo,
@@ -52,7 +56,7 @@ func main() {
 	requestID := "req_789"
 
 	// Request start
-	err = client.SendLog(ctx, usercanal.LogEntry{
+	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
 		ContextID: sessionID,
 		Level:     usercanal.LogInfo,
@@ -76,7 +80,7 @@ func main() {
 	time.Sleep(100 * time.Millisecond)
 
 	// Database operation log
-	err = client.SendLog(ctx, usercanal.LogEntry{
+	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
 		ContextID: sessionID,
 		Level:     usercanal.LogDebug,
@@ -94,9 +98,9 @@ func main() {
 		log.Printf("Failed to log database operation: %v", err)
 	}
 
-	// Authentication log (special event type)
-	err = client.SendLog(ctx, usercanal.LogEntry{
-		EventType: usercanal.LogAuth, // Special routing for security events
+	// Authentication log (using standard LogCollect)
+	err = client.Log(ctx, usercanal.LogEntry{
+		EventType: usercanal.LogCollect, // Use LogCollect for all logging
 		ContextID: sessionID,
 		Level:     usercanal.LogNotice,
 		Service:   "auth-service",
@@ -117,13 +121,16 @@ func main() {
 
 	// Error handling and logging
 	simulatedError := errors.New("connection timeout")
-	err = client.LogError(ctx, "external-api", simulatedError)
+	err = client.LogError(ctx, "external-api", simulatedError.Error(), map[string]interface{}{
+		"error_type": "timeout",
+		"service": "external-api",
+	})
 	if err != nil {
 		log.Printf("Failed to log error: %v", err)
 	}
 
 	// Request completion
-	err = client.SendLog(ctx, usercanal.LogEntry{
+	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
 		ContextID: sessionID,
 		Level:     usercanal.LogInfo,
@@ -169,7 +176,7 @@ func main() {
 		},
 	}
 
-	err = client.SendLogs(ctx, logBatch)
+	err = client.LogBatch(ctx, logBatch)
 	if err != nil {
 		log.Printf("Failed to send log batch: %v", err)
 	}
@@ -177,6 +184,11 @@ func main() {
 	// Final flush
 	if err := client.Flush(ctx); err != nil {
 		log.Printf("Failed to flush: %v", err)
+	}
+
+	// Close the client
+	if err := client.Close(ctx); err != nil {
+		log.Printf("Failed to close client: %v", err)
 	}
 
 	log.Println("Advanced logging example completed")

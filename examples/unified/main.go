@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 func main() {
 	// Single client for both analytics events and structured logging
 	client, err := usercanal.NewClient("YOUR_API_KEY", usercanal.Config{
-		Endpoint:      "collect.usercanal.com:9000",
+		Endpoint:      "collect.usercanal.com:50000",
 		BatchSize:     200,
 		FlushInterval: 5 * time.Second,
 		MaxRetries:    3,
@@ -25,30 +26,30 @@ func main() {
 		fmt.Printf("Failed to create unified client: %v\n", err)
 		return
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(context.Background()); err != nil {
+			log.Printf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	hostname, _ := os.Hostname()
 	userID := "user123"
 
 	// 1. Log application event
-	client.LogInfo(ctx, "user-service", "User initiated data export")
+	client.LogInfo(ctx, "user-service", "User initiated data export", nil)
 
 	// 2. Track analytics event for the same action
-	if err := client.TrackEvent(ctx, usercanal.Event{
-		UserId: userID,
-		Name:   usercanal.FeatureUsed,
-		Properties: usercanal.Properties{
-			"feature":     "data_export",
-			"export_type": "csv",
-		},
+	if err := client.Event(ctx, userID, usercanal.FeatureUsed, usercanal.Properties{
+		"feature":     "data_export",
+		"export_type": "csv",
 	}); err != nil {
 		// Log SDK errors through the SDK itself!
-		client.LogError(ctx, "sdk-events", fmt.Errorf("failed to track feature usage: %w", err))
+		client.LogError(ctx, "sdk-events", fmt.Sprintf("failed to track feature usage: %v", err), nil)
 	}
 
 	// 3. Detailed structured logging with correlation
-	if err := client.SendLog(ctx, usercanal.LogEntry{
+	if err := client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
 		Level:     usercanal.LogInfo,
 		Service:   "export-service",
@@ -61,34 +62,30 @@ func main() {
 			"format":       "csv",
 		},
 	}); err != nil {
-		client.LogError(ctx, "sdk-logs", fmt.Errorf("failed to send structured log: %w", err))
+		client.LogError(ctx, "sdk-logs", fmt.Sprintf("failed to send structured log: %v", err), nil)
 	}
 
 	// Simulate processing time
 	time.Sleep(2 * time.Second)
 
 	// 4. Log successful completion
-	client.LogInfo(ctx, "export-service", "Data export completed successfully")
+	client.LogInfo(ctx, "export-service", "Data export completed successfully", nil)
 
 	// 5. Track completion event for analytics
-	if err := client.TrackEvent(ctx, usercanal.Event{
-		UserId: userID,
-		Name:   usercanal.FeatureUsed,
-		Properties: usercanal.Properties{
-			"feature":         "data_export",
-			"status":          "completed",
-			"processing_time": 2000,
-			"file_size":       1024,
-		},
+	if err := client.Event(ctx, userID, usercanal.FeatureUsed, usercanal.Properties{
+		"feature":         "data_export",
+		"status":          "completed",
+		"processing_time": 2000,
+		"file_size":       1024,
 	}); err != nil {
-		client.LogError(ctx, "sdk-events", fmt.Errorf("failed to track completion: %w", err))
+		client.LogError(ctx, "sdk-events", fmt.Sprintf("failed to track completion: %v", err), nil)
 	}
 
 	// 6. Handle an error scenario
 	simulatedError := errors.New("temporary service unavailable")
 
 	// Log the application error
-	if err := client.SendLog(ctx, usercanal.LogEntry{
+	if err := client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
 		Level:     usercanal.LogError,
 		Service:   "notification-service",
@@ -101,40 +98,33 @@ func main() {
 		},
 	}); err != nil {
 		// Even SDK logging errors get logged through the SDK!
-		client.LogCritical(ctx, "sdk-logs", fmt.Sprintf("Failed to log application error: %v", err))
+		client.LogCritical(ctx, "sdk-logs", fmt.Sprintf("Failed to log application error: %v", err), nil)
 	}
 
 	// Track the error for analytics (optional - for error rate metrics)
-	if err := client.TrackEvent(ctx, usercanal.Event{
-		UserId: userID,
-		Name:   "error_occurred",
-		Properties: usercanal.Properties{
-			"error_type":  "notification_failure",
-			"service":     "notification-service",
-			"recoverable": true,
-		},
+	if err := client.Event(ctx, userID, "error_occurred", usercanal.Properties{
+		"error_type":  "notification_failure",
+		"service":     "notification-service",
+		"recoverable": true,
 	}); err != nil {
-		client.LogError(ctx, "sdk-events", fmt.Errorf("failed to track error event: %w", err))
+		client.LogError(ctx, "sdk-events", fmt.Sprintf("failed to track error event: %v", err), nil)
 	}
 
 	// 7. User identification for analytics
-	if err := client.IdentifyUser(ctx, usercanal.Identity{
-		UserId: userID,
-		Properties: usercanal.Properties{
-			"name":          "John Doe",
-			"email":         "john@example.com",
-			"last_activity": time.Now(),
-			"feature_usage": map[string]int{"data_export": 5},
-		},
+	if err := client.EventIdentify(ctx, userID, usercanal.Properties{
+		"name":          "John Doe",
+		"email":         "john@example.com",
+		"last_activity": time.Now(),
+		"feature_usage": map[string]int{"data_export": 5},
 	}); err != nil {
-		client.LogError(ctx, "sdk-events", fmt.Errorf("failed to identify user: %w", err))
+		client.LogError(ctx, "sdk-events", fmt.Sprintf("failed to identify user: %v", err), nil)
 	}
 
 	// 8. Demonstrate SDK error handling - what happens when we have connection issues?
 	// Force a flush to show how even flush errors get logged
 	if err := client.Flush(ctx); err != nil {
 		// Log flush failures through emergency logging
-		client.SendLog(ctx, usercanal.LogEntry{
+		client.Log(ctx, usercanal.LogEntry{
 			EventType: usercanal.LogCollect,
 			Level:     usercanal.LogEmergency,
 			Service:   "sdk-transport",
@@ -150,11 +140,17 @@ func main() {
 	}
 
 	// Show unified statistics
-	client.DumpStatus()
+	stats := client.GetStats()
+	log.Printf("Client Stats: Events queued: %d, Connection: %s", stats.EventsInQueue, stats.ConnectionState)
 
 	// Final log message
-	client.LogInfo(ctx, "example-app", "Unified events + logs example completed successfully")
+	client.LogInfo(ctx, "example-app", "Unified events + logs example completed successfully", nil)
 
 	// Final flush attempt
 	client.Flush(ctx)
+
+	// Close the client
+	if err := client.Close(ctx); err != nil {
+		log.Printf("Failed to close client: %v", err)
+	}
 }
