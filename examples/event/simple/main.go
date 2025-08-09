@@ -3,13 +3,19 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	usercanal "github.com/usercanal/sdk-go"
 )
 
 func main() {
 	// Initialize client with minimal configuration
-	client, err := usercanal.NewClient("YOUR_API_KEY")
+	client, err := usercanal.NewClient("000102030405060708090a0b0c0d0e0f", usercanal.Config{
+		Endpoint:      "localhost:50001",
+		Debug:         true,
+		FlushInterval: 1 * time.Second, // Shorter flush interval for testing
+		BatchSize:     1,               // Send immediately for testing
+	})
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
@@ -32,10 +38,10 @@ func main() {
 
 	// Track a custom event using string directly
 	err = client.Event(ctx, "user_123", "video.viewed", usercanal.Properties{
-		"video_id":    "vid_123",
-		"duration":    120,
-		"quality":     "hd",
-		"platform":    "web",
+		"video_id": "vid_123",
+		"duration": 120,
+		"quality":  "hd",
+		"platform": "web",
 	})
 	if err != nil {
 		log.Printf("Failed to track video view: %v", err)
