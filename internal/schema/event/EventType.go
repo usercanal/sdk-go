@@ -16,6 +16,7 @@ const (
 	EventTypeGROUP    EventType = 3
 	EventTypeALIAS    EventType = 4
 	EventTypeENRICH   EventType = 5
+	EventTypeCONTEXT  EventType = 6
 )
 
 var EnumNamesEventType = map[EventType]string{
@@ -25,6 +26,7 @@ var EnumNamesEventType = map[EventType]string{
 	EventTypeGROUP:    "GROUP",
 	EventTypeALIAS:    "ALIAS",
 	EventTypeENRICH:   "ENRICH",
+	EventTypeCONTEXT:  "CONTEXT",
 }
 
 var EnumValuesEventType = map[string]EventType{
@@ -34,6 +36,7 @@ var EnumValuesEventType = map[string]EventType{
 	"GROUP":    EventTypeGROUP,
 	"ALIAS":    EventTypeALIAS,
 	"ENRICH":   EventTypeENRICH,
+	"CONTEXT":  EventTypeCONTEXT,
 }
 
 func (v EventType) String() string {

@@ -39,58 +39,17 @@ func NewManager() (*Manager, error) {
 	return mgr, nil
 }
 
-// EnrichEvent adds identity information to an event
-func (m *Manager) EnrichEvent(event *transport.Event) *transport.Event {
+// EnrichEventMinimal does NOT auto-generate any IDs for server-side events
+// Both device_id and session_id remain nil unless explicitly set by developer
+func (m *Manager) EnrichEventMinimal(event *transport.Event) *transport.Event {
 	if event == nil {
 		return nil
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	// If no user ID is set, use distinct ID
-	if len(event.UserID) == 0 {
-		event.UserID = make([]byte, len(m.distinctID))
-		copy(event.UserID, m.distinctID)
-	}
+	// Do NOT auto-generate device_id or session_id for server SDKs
+	// Server events should have nil IDs unless explicitly provided
 
 	return event
-}
-
-// EnrichIdentify handles identity events and updates internal state
-func (m *Manager) EnrichIdentify(event *transport.Event) *transport.Event {
-	if event == nil {
-		return nil
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Update internal user ID if provided
-	if len(event.UserID) > 0 {
-		m.userID = make([]byte, len(event.UserID))
-		copy(m.userID, event.UserID)
-		logger.Debug("Updated user ID to: %x", m.userID)
-	}
-
-	return event
-}
-
-// EnrichGroup adds user identity to group events
-func (m *Manager) EnrichGroup(event *transport.Event) *transport.Event {
-	if event == nil {
-		return nil
-	}
-
-	m.mu.RLock()
-	// If we have a user ID, ensure it's included
-	if len(m.userID) > 0 && len(event.UserID) == 0 {
-		event.UserID = make([]byte, len(m.userID))
-		copy(event.UserID, m.userID)
-	}
-	m.mu.RUnlock()
-
-	return m.EnrichEvent(event)
 }
 
 // GetIdentity returns the current identity state

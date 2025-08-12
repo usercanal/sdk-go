@@ -8,6 +8,14 @@ import (
 
 /// Standard batch structure for all data types
 /// This is the top-level container that wraps all schema-specific data
+///
+/// Field ordering is optimized for collector processing pipeline:
+/// 1. api_key: Authentication gate - drop unauthorized batches early
+/// 2. version: Decoder selection - choose protocol handler
+/// 3. schema_type: Handler routing - events vs logs pipeline
+/// 4. batch_id: Deduplication check - after routing decision
+/// 5. data: Payload processing - most expensive operation last
+///
 /// Field IDs ensure forward compatibility and allow optimal field ordering
 type Batch struct {
 	_tab flatbuffers.Table
@@ -78,20 +86,8 @@ func (rcv *Batch) MutateApiKey(j int, n byte) bool {
 	return false
 }
 
-func (rcv *Batch) BatchId() uint64 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
-	if o != 0 {
-		return rcv._tab.GetUint64(o + rcv._tab.Pos)
-	}
-	return 0
-}
-
-func (rcv *Batch) MutateBatchId(n uint64) bool {
-	return rcv._tab.MutateUint64Slot(6, n)
-}
-
 func (rcv *Batch) SchemaType() SchemaType {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return SchemaType(rcv._tab.GetByte(o + rcv._tab.Pos))
 	}
@@ -99,11 +95,35 @@ func (rcv *Batch) SchemaType() SchemaType {
 }
 
 func (rcv *Batch) MutateSchemaType(n SchemaType) bool {
-	return rcv._tab.MutateByteSlot(8, byte(n))
+	return rcv._tab.MutateByteSlot(6, byte(n))
+}
+
+func (rcv *Batch) Version() byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	if o != 0 {
+		return rcv._tab.GetByte(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *Batch) MutateVersion(n byte) bool {
+	return rcv._tab.MutateByteSlot(8, n)
+}
+
+func (rcv *Batch) BatchId() uint64 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	if o != 0 {
+		return rcv._tab.GetUint64(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *Batch) MutateBatchId(n uint64) bool {
+	return rcv._tab.MutateUint64Slot(10, n)
 }
 
 func (rcv *Batch) Data(j int) byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -112,7 +132,7 @@ func (rcv *Batch) Data(j int) byte {
 }
 
 func (rcv *Batch) DataLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -120,7 +140,7 @@ func (rcv *Batch) DataLength() int {
 }
 
 func (rcv *Batch) DataBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -128,7 +148,7 @@ func (rcv *Batch) DataBytes() []byte {
 }
 
 func (rcv *Batch) MutateData(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -137,7 +157,7 @@ func (rcv *Batch) MutateData(j int, n byte) bool {
 }
 
 func BatchStart(builder *flatbuffers.Builder) {
-	builder.StartObject(4)
+	builder.StartObject(5)
 }
 func BatchAddApiKey(builder *flatbuffers.Builder, apiKey flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(apiKey), 0)
@@ -145,14 +165,17 @@ func BatchAddApiKey(builder *flatbuffers.Builder, apiKey flatbuffers.UOffsetT) {
 func BatchStartApiKeyVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)
 }
-func BatchAddBatchId(builder *flatbuffers.Builder, batchId uint64) {
-	builder.PrependUint64Slot(1, batchId, 0)
-}
 func BatchAddSchemaType(builder *flatbuffers.Builder, schemaType SchemaType) {
-	builder.PrependByteSlot(2, byte(schemaType), 0)
+	builder.PrependByteSlot(1, byte(schemaType), 0)
+}
+func BatchAddVersion(builder *flatbuffers.Builder, version byte) {
+	builder.PrependByteSlot(2, version, 0)
+}
+func BatchAddBatchId(builder *flatbuffers.Builder, batchId uint64) {
+	builder.PrependUint64Slot(3, batchId, 0)
 }
 func BatchAddData(builder *flatbuffers.Builder, data flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(data), 0)
+	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(data), 0)
 }
 func BatchStartDataVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)

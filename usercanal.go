@@ -90,8 +90,9 @@ func (c *Client) EventRevenue(ctx context.Context, userID string, orderID string
 	return c.internal.Revenue(ctx, revenue)
 }
 
-// TODO: EventAdvanced for complex cases (custom timestamps, event IDs, etc.)
-// canal.EventAdvanced(ctx, Event{...}) - implement when customers need it
+func (c *Client) EventAdvanced(ctx context.Context, event EventAdvanced) error {
+	return c.internal.TrackAdvanced(ctx, event)
+}
 
 func (c *Client) Flush(ctx context.Context) error {
 	return c.internal.Flush(ctx)
@@ -101,12 +102,22 @@ func (c *Client) Close(ctx context.Context) error {
 	return c.internal.Close(ctx)
 }
 
+// NewSession generates a new session ID for tracking user sessions
+// Returns a 16-byte binary session ID that can be used in events
+func (c *Client) NewSession() []byte {
+	return c.internal.GenerateSessionID()
+}
 
+// ResetSession creates a new session, useful for user logout/login scenarios
+func (c *Client) ResetSession() {
+	c.internal.ResetSession()
+}
 
 // Re-export types that users need
 type (
 	Properties           = types.Properties
 	Event                = types.Event
+	EventAdvanced        = types.EventAdvanced
 	Identity             = types.Identity
 	GroupInfo            = types.GroupInfo
 	Revenue              = types.Revenue
@@ -143,13 +154,13 @@ const (
 	TwoFactorDisabled    = types.TwoFactorDisabled
 
 	// Revenue & Billing Events
-	OrderCompleted        = types.OrderCompleted
-	OrderRefunded         = types.OrderRefunded
-	OrderCanceled         = types.OrderCanceled
-	PaymentFailed         = types.PaymentFailed
-	PaymentMethodAdded    = types.PaymentMethodAdded
-	PaymentMethodUpdated  = types.PaymentMethodUpdated
-	PaymentMethodRemoved  = types.PaymentMethodRemoved
+	OrderCompleted       = types.OrderCompleted
+	OrderRefunded        = types.OrderRefunded
+	OrderCanceled        = types.OrderCanceled
+	PaymentFailed        = types.PaymentFailed
+	PaymentMethodAdded   = types.PaymentMethodAdded
+	PaymentMethodUpdated = types.PaymentMethodUpdated
+	PaymentMethodRemoved = types.PaymentMethodRemoved
 
 	// Subscription Management Events
 	SubscriptionStarted  = types.SubscriptionStarted
@@ -160,10 +171,10 @@ const (
 	SubscriptionCanceled = types.SubscriptionCanceled
 
 	// Trial & Conversion Events
-	TrialStarted     = types.TrialStarted
-	TrialEndingSoon  = types.TrialEndingSoon
-	TrialEnded       = types.TrialEnded
-	TrialConverted   = types.TrialConverted
+	TrialStarted    = types.TrialStarted
+	TrialEndingSoon = types.TrialEndingSoon
+	TrialEnded      = types.TrialEnded
+	TrialConverted  = types.TrialConverted
 
 	// Shopping Experience Events
 	CartViewed        = types.CartViewed
@@ -181,13 +192,13 @@ const (
 	NotificationClicked = types.NotificationClicked
 
 	// Communication Events
-	EmailSent               = types.EmailSent
-	EmailOpened             = types.EmailOpened
-	EmailClicked            = types.EmailClicked
-	EmailBounced            = types.EmailBounced
-	EmailUnsubscribed       = types.EmailUnsubscribed
-	SupportTicketCreated    = types.SupportTicketCreated
-	SupportTicketResolved   = types.SupportTicketResolved
+	EmailSent             = types.EmailSent
+	EmailOpened           = types.EmailOpened
+	EmailClicked          = types.EmailClicked
+	EmailBounced          = types.EmailBounced
+	EmailUnsubscribed     = types.EmailUnsubscribed
+	SupportTicketCreated  = types.SupportTicketCreated
+	SupportTicketResolved = types.SupportTicketResolved
 
 	// Authentication Methods
 	AuthMethodPassword = types.AuthMethodPassword
@@ -197,7 +208,7 @@ const (
 	AuthMethodEmail    = types.AuthMethodEmail
 
 	// Revenue Types
-	RevenueTypeOneTime     = types.RevenueTypeOneTime
+	RevenueTypeOneTime      = types.RevenueTypeOneTime
 	RevenueTypeSubscription = types.RevenueTypeSubscription
 
 	// Major Global Currencies
@@ -306,29 +317,29 @@ const (
 	ChannelPodcast   = types.ChannelPodcast
 
 	// Traffic Sources
-	SourceGoogle    = types.SourceGoogle
-	SourceFacebook  = types.SourceFacebook
-	SourceTwitter   = types.SourceTwitter
-	SourceLinkedIn  = types.SourceLinkedIn
-	SourceInstagram = types.SourceInstagram
-	SourceYouTube   = types.SourceYouTube
-	SourceTikTok    = types.SourceTikTok
-	SourceSnapchat  = types.SourceSnapchat
-	SourcePinterest = types.SourcePinterest
-	SourceReddit    = types.SourceReddit
-	SourceBing      = types.SourceBing
-	SourceYahoo     = types.SourceYahoo
+	SourceGoogle     = types.SourceGoogle
+	SourceFacebook   = types.SourceFacebook
+	SourceTwitter    = types.SourceTwitter
+	SourceLinkedIn   = types.SourceLinkedIn
+	SourceInstagram  = types.SourceInstagram
+	SourceYouTube    = types.SourceYouTube
+	SourceTikTok     = types.SourceTikTok
+	SourceSnapchat   = types.SourceSnapchat
+	SourcePinterest  = types.SourcePinterest
+	SourceReddit     = types.SourceReddit
+	SourceBing       = types.SourceBing
+	SourceYahoo      = types.SourceYahoo
 	SourceDuckDuckGo = types.SourceDuckDuckGo
 	SourceNewsletter = types.SourceNewsletter
-	SourceEmail     = types.SourceEmail
-	SourceBlog      = types.SourceBlog
-	SourcePodcast   = types.SourcePodcast
-	SourceWebinar   = types.SourceWebinar
-	SourcePartner   = types.SourcePartner
-	SourceAffiliate = types.SourceAffiliate
-	SourceDirect    = types.SourceDirect
-	SourceOrganic   = types.SourceOrganic
-	SourceUnknown   = types.SourceUnknown
+	SourceEmail      = types.SourceEmail
+	SourceBlog       = types.SourceBlog
+	SourcePodcast    = types.SourcePodcast
+	SourceWebinar    = types.SourceWebinar
+	SourcePartner    = types.SourcePartner
+	SourceAffiliate  = types.SourceAffiliate
+	SourceDirect     = types.SourceDirect
+	SourceOrganic    = types.SourceOrganic
+	SourceUnknown    = types.SourceUnknown
 
 	// Device Types
 	DeviceDesktop = types.DeviceDesktop

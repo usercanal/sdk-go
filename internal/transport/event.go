@@ -35,9 +35,7 @@ func (s *Sender) SendEvents(ctx context.Context, events []*Event) error {
 		if evt.Timestamp == 0 {
 			return types.NewValidationError("Timestamp", fmt.Sprintf("event[%d] timestamp is required", i))
 		}
-		if len(evt.UserID) == 0 {
-			return types.NewValidationError("UserID", fmt.Sprintf("event[%d] userID is required", i))
-		}
+		// DeviceID is optional for server SDKs - no validation required
 		if len(evt.Payload) == 0 {
 			return types.NewValidationError("Payload", fmt.Sprintf("event[%d] payload is required", i))
 		}
@@ -67,12 +65,31 @@ func (s *Sender) SendEvents(ctx context.Context, events []*Event) error {
 		evt := events[i]
 
 		payloadOffset := builder.CreateByteVector(evt.Payload)
-		userIDOffset := builder.CreateByteVector(evt.UserID)
+		var eventNameOffset flatbuffers.UOffsetT
+		if evt.EventName != "" {
+			eventNameOffset = builder.CreateString(evt.EventName)
+		}
+		var deviceIDOffset flatbuffers.UOffsetT
+		if len(evt.DeviceID) > 0 {
+			deviceIDOffset = builder.CreateByteVector(evt.DeviceID)
+		}
+		var sessionIDOffset flatbuffers.UOffsetT
+		if len(evt.SessionID) > 0 {
+			sessionIDOffset = builder.CreateByteVector(evt.SessionID)
+		}
 
 		event_collector.EventStart(builder)
-		event_collector.EventAddTimestamp(builder, evt.Timestamp)
 		event_collector.EventAddEventType(builder, evt.EventType)
-		event_collector.EventAddUserId(builder, userIDOffset)
+		event_collector.EventAddTimestamp(builder, evt.Timestamp)
+		if len(evt.DeviceID) > 0 {
+			event_collector.EventAddDeviceId(builder, deviceIDOffset)
+		}
+		if len(evt.SessionID) > 0 {
+			event_collector.EventAddSessionId(builder, sessionIDOffset)
+		}
+		if evt.EventName != "" {
+			event_collector.EventAddEventName(builder, eventNameOffset)
+		}
 		event_collector.EventAddPayload(builder, payloadOffset)
 		eventOffsets[i] = event_collector.EventEnd(builder)
 	}

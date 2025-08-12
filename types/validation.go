@@ -25,6 +25,34 @@ func (e *Event) Validate() error {
 	return nil
 }
 
+// EventAdvanced validation
+func (e *EventAdvanced) Validate() error {
+	if e.UserId == "" {
+		return NewValidationError("UserId", "is required")
+	}
+	if e.Name == "" {
+		return NewValidationError("Name", "is required")
+	}
+	if !e.Name.IsStandardEvent() {
+		logger.Warn("Non-standard event name used: %s", e.Name)
+	}
+
+	// Validate optional device ID length if provided
+	if e.DeviceID != nil && len(*e.DeviceID) != 16 {
+		return NewValidationError("DeviceID", "must be exactly 16 bytes when provided")
+	}
+
+	// Validate optional session ID length if provided
+	if e.SessionID != nil && len(*e.SessionID) != 16 {
+		return NewValidationError("SessionID", "must be exactly 16 bytes when provided")
+	}
+
+	if err := validateProperties(e.Properties); err != nil {
+		return fmt.Errorf("properties validation failed: %w", err)
+	}
+	return nil
+}
+
 // Identity validation
 func (i *Identity) Validate() error {
 	if i.UserId == "" {

@@ -41,7 +41,6 @@ func EventToInternal(e *types.Event) (*transport.Event, error) {
 	}
 
 	payload, err := marshalPayload(map[string]interface{}{
-		"name":       e.Name.String(),
 		"properties": e.Properties,
 	})
 	if err != nil {
@@ -51,7 +50,9 @@ func EventToInternal(e *types.Event) (*transport.Event, error) {
 	return &transport.Event{
 		Timestamp: resolveTimestamp(e.Timestamp),
 		EventType: eventType,
-		UserID:    []byte(e.UserId),
+		EventName: e.Name.String(), // Extract event name for performance optimization
+		DeviceID:  nil,             // Will be set by identity manager or overridden in TrackAdvanced
+		SessionID: e.SessionID,     // Will be set by identity manager if nil
 		Payload:   payload,
 	}, nil
 }
@@ -72,7 +73,9 @@ func IdentityToInternal(i *types.Identity) (*transport.Event, error) {
 	return &transport.Event{
 		Timestamp: resolveTimestamp(time.Time{}), // Always use current time
 		EventType: event_collector.EventTypeIDENTIFY,
-		UserID:    []byte(i.UserId),
+		EventName: "identify",  // Set event name for identify events
+		DeviceID:  nil,         // Will be set by identity manager or overridden in TrackAdvanced
+		SessionID: i.SessionID, // Will be set by identity manager if nil
 		Payload:   payload,
 	}, nil
 }
@@ -98,7 +101,9 @@ func GroupToInternal(g *types.GroupInfo) (*transport.Event, error) {
 	return &transport.Event{
 		Timestamp: resolveTimestamp(time.Time{}), // Always use current time
 		EventType: event_collector.EventTypeGROUP,
-		UserID:    []byte(g.UserId),
+		EventName: "group",     // Set event name for group events
+		DeviceID:  nil,         // Will be set by identity manager or overridden in TrackAdvanced
+		SessionID: g.SessionID, // Will be set by identity manager if nil
 		Payload:   payload,
 	}, nil
 }
@@ -150,7 +155,6 @@ func RevenueToInternal(r *types.Revenue) (*transport.Event, error) {
 	}
 
 	payload, err := marshalPayload(map[string]interface{}{
-		"name":       types.OrderCompleted.String(),
 		"properties": properties,
 	})
 	if err != nil {
@@ -160,7 +164,9 @@ func RevenueToInternal(r *types.Revenue) (*transport.Event, error) {
 	return &transport.Event{
 		Timestamp: resolveTimestamp(time.Time{}),
 		EventType: event_collector.EventTypeTRACK,
-		UserID:    []byte(r.UserID), // Correct: actual user who made the purchase
-		Payload:   payload,          // OrderID is in the payload data
+		EventName: types.OrderCompleted.String(), // Set event name for revenue events
+		DeviceID:  nil,                           // Will be set by identity manager or overridden in TrackAdvanced
+		SessionID: r.SessionID,                   // Will be set by identity manager if nil
+		Payload:   payload,                       // OrderID is in the payload data
 	}, nil
 }

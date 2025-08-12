@@ -16,12 +16,21 @@ enum SchemaType:uint8 {
 
 /// Standard batch structure for all data types
 /// This is the top-level container that wraps all schema-specific data
+///
+/// Field ordering is optimized for collector processing pipeline:
+/// 1. api_key: Authentication gate - drop unauthorized batches early
+/// 2. version: Decoder selection - choose protocol handler
+/// 3. schema_type: Handler routing - events vs logs pipeline
+/// 4. batch_id: Deduplication check - after routing decision
+/// 5. data: Payload processing - most expensive operation last
+///
 /// Field IDs ensure forward compatibility and allow optimal field ordering
 table Batch {
-    api_key:[ubyte] (required, id: 0);  // Fixed 16-byte authentication key
-    batch_id:uint64 (id: 1);            // Optional sequence number for tracking
-    schema_type:SchemaType (id: 2);     // Schema type for routing
-    data:[ubyte] (required, id: 3);     // Schema-specific data payload
+    api_key:[ubyte] (required, id: 0);  // Fixed 16-byte authentication key - FIRST for auth gate
+    schema_type:SchemaType (id: 1);     // Schema type for handler routing (events/logs/metrics) – used second
+    version:uint8 (id: 2);              // Protocol version (v1.0=100, v1.1=101, v2.0=200)
+    batch_id:uint64 (id: 3);            // Optional sequence number for deduplication and data drop tracking
+    data:[ubyte] (required, id: 4);     // Schema-specific data payload - LAST for efficiency
 }
 
 root_type Batch;

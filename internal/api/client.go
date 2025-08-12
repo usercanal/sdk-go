@@ -9,6 +9,7 @@ import (
 
 	"github.com/usercanal/sdk-go/internal/batch"
 	configDefaults "github.com/usercanal/sdk-go/internal/config"
+	"github.com/usercanal/sdk-go/internal/identity"
 	"github.com/usercanal/sdk-go/internal/logger"
 	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
@@ -29,6 +30,7 @@ type Client struct {
 	sender       *transport.Sender
 	eventBatcher *batch.Manager
 	logBatcher   *batch.Manager
+	identityMgr  *identity.Manager
 	mu           sync.RWMutex
 	closed       bool
 	closing      bool
@@ -169,11 +171,18 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	eventBatchMgr := batch.NewManager(cfg.batchSize, cfg.flushInterval, eventSendFunc)
 	logBatchMgr := batch.NewManager(cfg.batchSize, cfg.flushInterval, logSendFunc)
 
+	// Create identity manager for session and device ID management
+	identityMgr, err := identity.NewManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create identity manager: %w", err)
+	}
+
 	client := &Client{
 		cfg:          cfg,
 		sender:       sender,
 		eventBatcher: eventBatchMgr,
 		logBatcher:   logBatchMgr,
+		identityMgr:  identityMgr,
 	}
 
 	return client, nil
@@ -265,4 +274,20 @@ func (c *Client) Close(ctx context.Context) error {
 	c.mu.Unlock()
 
 	return flushErr
+}
+
+// GenerateSessionID creates a new session ID
+func (c *Client) GenerateSessionID() []byte {
+	if c.identityMgr != nil {
+		return c.identityMgr.GenerateEventID()
+	}
+	// Fallback if identity manager is not available
+	return make([]byte, 16)
+}
+
+// ResetSession creates a new session
+func (c *Client) ResetSession() {
+	if c.identityMgr != nil {
+		c.identityMgr.Reset()
+	}
 }

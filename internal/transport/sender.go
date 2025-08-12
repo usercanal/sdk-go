@@ -16,6 +16,11 @@ import (
 	"github.com/usercanal/sdk-go/types"
 )
 
+// Protocol version constants
+const (
+	ProtocolVersionCurrent = 100 // v1.0 = 100
+)
+
 // Sender handles data sending and metrics
 type Sender struct {
 	connMgr   *ConnManager
@@ -112,8 +117,9 @@ func (s *Sender) sendBatch(ctx context.Context, schemaType schema_common.SchemaT
 
 	schema_common.BatchStart(builder)
 	schema_common.BatchAddApiKey(builder, apiKeyOffset)
-	schema_common.BatchAddBatchId(builder, batchID)
 	schema_common.BatchAddSchemaType(builder, schemaType)
+	schema_common.BatchAddVersion(builder, ProtocolVersionCurrent)
+	schema_common.BatchAddBatchId(builder, batchID)
 	schema_common.BatchAddData(builder, dataOffset)
 	batchOffset := schema_common.BatchEnd(builder)
 

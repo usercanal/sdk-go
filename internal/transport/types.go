@@ -10,7 +10,9 @@ import (
 type Event struct {
 	Timestamp uint64
 	EventType event_schema.EventType
-	UserID    []byte
+	EventName string
+	DeviceID  []byte
+	SessionID []byte
 	Payload   []byte
 }
 

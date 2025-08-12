@@ -12,22 +12,31 @@ namespace schema.event;
 /// Determines downstream processing and storage routing
 enum EventType:uint8 {
     UNKNOWN = 0,     // Default value required by FlatBuffers
-    TRACK = 1,       // User action tracking (page views, clicks, etc.)
-    IDENTIFY = 2,    // User identification/traits updates
-    GROUP = 3,       // Group membership/traits updates
-    ALIAS = 4,       // Identity resolution/user merging
-    ENRICH = 5       // Generic entity enrichment
+    TRACK = 1,       // User action tracking (page views, clicks, etc.) → events table
+    IDENTIFY = 2,    // User identification/traits updates → users table
+    GROUP = 3,       // Group membership/traits updates → users table
+    ALIAS = 4,       // Identity resolution/user merging → users table
+    ENRICH = 5,      // Generic entity enrichment → meta data
+    CONTEXT = 6      // Session/device context updates → context table
 }
 
 /// Single event in the CDP system
-/// Field IDs allow optimal memory layout and forward compatibility
-/// Note: session_id (context_id) and message_id can be included in payload
-/// if needed - testing through SDKs to determine if top-level fields are required
+/// Field ordering optimized for collector processing pipeline:
+/// 1. event_type: Routing selector - determines which handler/table (FIRST for fast routing)
+/// 2. timestamp: Time-series key - primary sort dimension
+/// 3. device_id: Identity key - core analytics dimension
+/// 4. session_id: Context key - session analytics linking
+/// 5. event_name: Optional event name for performance (avoids JSON parsing)
+/// 6. payload: Event data - largest field, processed last
+///
+/// Field IDs ensure forward compatibility and optimal memory layout
 table Event {
-    timestamp:uint64 (id: 0);           // Unix timestamp in milliseconds
-    event_type:EventType (id: 1);       // Processing path selector
-    user_id:[ubyte] (id: 2);            // Fixed 16-byte UUID
-    payload:[ubyte] (id: 3);            // Event data as bytes
+    event_type:EventType (id: 0);       // Processing path selector - FIRST for fast routing
+    timestamp:uint64 (id: 1);           // Unix timestamp in milliseconds
+    device_id:[ubyte] (id: 2);          // Fixed 16-byte device UUID (was user_id)
+    session_id:[ubyte] (id: 3);         // 16-byte session UUID for context linking
+    event_name:string (id: 4);          // Optional event name (e.g. "user_signed_up") - avoids JSON parsing
+    payload:[ubyte] (id: 5);            // Event data as JSON bytes - processed last
 }
 
 /// Event data container (goes in Batch.data)
