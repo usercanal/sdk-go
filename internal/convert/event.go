@@ -40,9 +40,7 @@ func EventToInternal(e *types.Event) (*transport.Event, error) {
 		return nil, fmt.Errorf("unmapped event type: %s", e.Name)
 	}
 
-	payload, err := marshalPayload(map[string]interface{}{
-		"properties": e.Properties,
-	})
+	payload, err := marshalPayload(e.Properties)
 	if err != nil {
 		return nil, err
 	}
@@ -154,9 +152,7 @@ func RevenueToInternal(r *types.Revenue) (*transport.Event, error) {
 		properties[k] = v
 	}
 
-	payload, err := marshalPayload(map[string]interface{}{
-		"properties": properties,
-	})
+	payload, err := marshalPayload(properties)
 	if err != nil {
 		return nil, err
 	}
