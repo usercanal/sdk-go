@@ -29,7 +29,7 @@ enum LogEventType:uint8 {
 /// Single log entry - field order preserved for compatibility
 table LogEntry {
     event_type:LogEventType (id: 0);    // Primary field for routing
-    context_id:uint64 (id: 1);          // Session/transaction ID for correlation
+    session_id:[ubyte] (id: 1);         // 16-byte session UUID for correlation
     level:LogLevel (id: 2);             // Severity level
     timestamp:uint64 (id: 3);           // Source timestamp (ms since epoch)
     source:string (id: 4);              // Source hostname/instance

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	usercanal "github.com/usercanal/sdk-go"
 )
 
@@ -31,12 +32,13 @@ func main() {
 
 	ctx := context.Background()
 	hostname, _ := os.Hostname()
-	sessionID := uint64(time.Now().UnixNano()) // Simple session ID
+	sessionUUID := uuid.New()
+	sessionID := sessionUUID[:] // Convert UUID to []byte for session tracking
 
 	// Application startup log
 	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
-		ContextID: sessionID,
+		SessionID: sessionID,
 		Level:     usercanal.LogInfo,
 		Service:   "api-gateway",
 		Source:    hostname,
@@ -58,7 +60,7 @@ func main() {
 	// Request start
 	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
-		ContextID: sessionID,
+		SessionID: sessionID,
 		Level:     usercanal.LogInfo,
 		Service:   "api-gateway",
 		Source:    hostname,
@@ -82,7 +84,7 @@ func main() {
 	// Database operation log
 	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
-		ContextID: sessionID,
+		SessionID: sessionID,
 		Level:     usercanal.LogDebug,
 		Service:   "database",
 		Source:    hostname,
@@ -101,7 +103,7 @@ func main() {
 	// Authentication log (using standard LogCollect)
 	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect, // Use LogCollect for all logging
-		ContextID: sessionID,
+		SessionID: sessionID,
 		Level:     usercanal.LogNotice,
 		Service:   "auth-service",
 		Source:    hostname,
@@ -123,7 +125,7 @@ func main() {
 	simulatedError := errors.New("connection timeout")
 	err = client.LogError(ctx, "external-api", simulatedError.Error(), map[string]interface{}{
 		"error_type": "timeout",
-		"service": "external-api",
+		"service":    "external-api",
 	})
 	if err != nil {
 		log.Printf("Failed to log error: %v", err)
@@ -132,7 +134,7 @@ func main() {
 	// Request completion
 	err = client.Log(ctx, usercanal.LogEntry{
 		EventType: usercanal.LogCollect,
-		ContextID: sessionID,
+		SessionID: sessionID,
 		Level:     usercanal.LogInfo,
 		Service:   "api-gateway",
 		Source:    hostname,

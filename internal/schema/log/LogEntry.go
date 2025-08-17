@@ -54,16 +54,38 @@ func (rcv *LogEntry) MutateEventType(n LogEventType) bool {
 	return rcv._tab.MutateByteSlot(4, byte(n))
 }
 
-func (rcv *LogEntry) ContextId() uint64 {
+func (rcv *LogEntry) SessionId(j int) byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
-		return rcv._tab.GetUint64(o + rcv._tab.Pos)
+		a := rcv._tab.Vector(o)
+		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
 	}
 	return 0
 }
 
-func (rcv *LogEntry) MutateContextId(n uint64) bool {
-	return rcv._tab.MutateUint64Slot(6, n)
+func (rcv *LogEntry) SessionIdLength() int {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	if o != 0 {
+		return rcv._tab.VectorLen(o)
+	}
+	return 0
+}
+
+func (rcv *LogEntry) SessionIdBytes() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
+func (rcv *LogEntry) MutateSessionId(j int, n byte) bool {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	if o != 0 {
+		a := rcv._tab.Vector(o)
+		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
+	}
+	return false
 }
 
 func (rcv *LogEntry) Level() LogLevel {
@@ -146,8 +168,11 @@ func LogEntryStart(builder *flatbuffers.Builder) {
 func LogEntryAddEventType(builder *flatbuffers.Builder, eventType LogEventType) {
 	builder.PrependByteSlot(0, byte(eventType), 0)
 }
-func LogEntryAddContextId(builder *flatbuffers.Builder, contextId uint64) {
-	builder.PrependUint64Slot(1, contextId, 0)
+func LogEntryAddSessionId(builder *flatbuffers.Builder, sessionId flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(sessionId), 0)
+}
+func LogEntryStartSessionIdVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+	return builder.StartVector(1, numElems, 1)
 }
 func LogEntryAddLevel(builder *flatbuffers.Builder, level LogLevel) {
 	builder.PrependByteSlot(2, byte(level), 0)

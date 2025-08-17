@@ -26,7 +26,7 @@ enum EventType:uint8 {
 /// 2. timestamp: Time-series key - primary sort dimension
 /// 3. device_id: Identity key - core analytics dimension
 /// 4. session_id: Context key - session analytics linking
-/// 5. event_name: Optional event name for performance (avoids JSON parsing)
+/// 5. event_name: Optional event name for performance (avoids JSON parsing, since it's per event tracked)
 /// 6. payload: Event data - largest field, processed last
 ///
 /// Field IDs ensure forward compatibility and optimal memory layout

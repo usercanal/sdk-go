@@ -12,7 +12,7 @@ import (
 
 type Manager struct {
 	distinctID []byte // 16-byte UUID
-	contextID  []byte // 16-byte UUID for session tracking
+	sessionID  []byte // 16-byte UUID for session tracking
 	userID     []byte // 16-byte UUID or custom ID
 	startTime  time.Time
 	mu         sync.RWMutex
@@ -27,11 +27,11 @@ func uuidToBytes(u uuid.UUID) []byte {
 
 func NewManager() (*Manager, error) {
 	distinctID := uuidToBytes(uuid.New())
-	contextID := uuidToBytes(uuid.New())
+	sessionID := uuidToBytes(uuid.New())
 
 	mgr := &Manager{
 		distinctID: distinctID,
-		contextID:  contextID,
+		sessionID:  sessionID,
 		startTime:  time.Now(),
 	}
 
@@ -53,7 +53,7 @@ func (m *Manager) EnrichEventMinimal(event *transport.Event) *transport.Event {
 }
 
 // GetIdentity returns the current identity state
-func (m *Manager) GetIdentity() (distinctID, userID, contextID []byte) {
+func (m *Manager) GetIdentity() (distinctID, userID, sessionID []byte) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -65,8 +65,8 @@ func (m *Manager) GetIdentity() (distinctID, userID, contextID []byte) {
 		copy(userID, m.userID)
 	}
 
-	contextID = make([]byte, len(m.contextID))
-	copy(contextID, m.contextID)
+	sessionID = make([]byte, len(m.sessionID))
+	copy(sessionID, m.sessionID)
 
 	return
 }
@@ -100,6 +100,6 @@ func (m *Manager) Reset() {
 	defer m.mu.Unlock()
 
 	m.userID = nil
-	m.contextID = uuidToBytes(uuid.New())
+	m.sessionID = uuidToBytes(uuid.New())
 	m.startTime = time.Now()
 }

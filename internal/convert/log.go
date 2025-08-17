@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	schema_log "github.com/usercanal/sdk-go/internal/schema/log"
 	"github.com/usercanal/sdk-go/internal/transport"
 	"github.com/usercanal/sdk-go/types"
@@ -37,11 +38,10 @@ var logEventTypeMap = map[types.LogEventType]schema_log.LogEventType{
 	types.LogEnrich:  schema_log.LogEventTypeENRICH,
 }
 
-// generateContextID creates a simple context ID when not provided
-func generateContextID() uint64 {
-	randMutex.Lock()
-	defer randMutex.Unlock()
-	return randSource.Uint64()
+// generateSessionID creates a session ID when not provided
+func generateSessionID() []byte {
+	sessionUUID := uuid.New()
+	return sessionUUID[:]
 }
 
 // LogToInternal converts a types.LogEntry to an internal transport.LogEntry
@@ -66,10 +66,10 @@ func LogToInternal(l *types.LogEntry) (*transport.Log, error) {
 		return nil, fmt.Errorf("invalid log event type: %d", l.EventType)
 	}
 
-	// Generate context ID if not provided
-	contextID := l.ContextID
-	if contextID == 0 {
-		contextID = generateContextID()
+	// Generate session ID if not provided
+	sessionID := l.SessionID
+	if len(sessionID) == 0 {
+		sessionID = generateSessionID()
 	}
 
 	// Prepare payload - combine message and data
@@ -90,7 +90,7 @@ func LogToInternal(l *types.LogEntry) (*transport.Log, error) {
 
 	return &transport.Log{
 		EventType: fbEventType,
-		ContextID: contextID,
+		SessionID: sessionID,
 		Level:     fbLogLevel,
 		Timestamp: resolveTimestamp(l.Timestamp),
 		Source:    l.Source,

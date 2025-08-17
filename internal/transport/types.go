@@ -19,7 +19,7 @@ type Event struct {
 // Log represents an internal log structure for transport
 type Log struct {
 	EventType log_schema.LogEventType
-	ContextID uint64
+	SessionID []byte // 16-byte session UUID for correlation
 	Level     log_schema.LogLevel
 	Timestamp uint64
 	Source    string

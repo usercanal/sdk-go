@@ -67,7 +67,7 @@ func (t LogEventType) String() string {
 // LogEntry represents a log entry in the system
 type LogEntry struct {
 	EventType LogEventType
-	ContextID uint64
+	SessionID []byte // 16-byte session UUID for correlation
 	Level     LogLevel
 	Timestamp time.Time
 	Source    string

@@ -72,10 +72,11 @@ func (s *Sender) SendLogs(ctx context.Context, logs []*Log) error {
 		payloadOffset := builder.CreateByteVector(log.Payload)
 		sourceOffset := builder.CreateString(log.Source)
 		serviceOffset := builder.CreateString(log.Service)
+		sessionIdOffset := builder.CreateByteVector(log.SessionID)
 
 		schema_log.LogEntryStart(builder)
 		schema_log.LogEntryAddEventType(builder, log.EventType)
-		schema_log.LogEntryAddContextId(builder, log.ContextID)
+		schema_log.LogEntryAddSessionId(builder, sessionIdOffset)
 		schema_log.LogEntryAddLevel(builder, log.Level)
 		schema_log.LogEntryAddTimestamp(builder, log.Timestamp)
 		schema_log.LogEntryAddSource(builder, sourceOffset)
